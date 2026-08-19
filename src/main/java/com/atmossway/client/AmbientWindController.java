@@ -26,17 +26,19 @@ public final class AmbientWindController {
 
     public static void track(ClientLevel level, BlockPos pos) {
         if (level == activeLevel) {
-            SWAY_SECTIONS.add(SectionPos.asLong(pos));
+            AtmosSwayDiagnostics.sectionTracked(SWAY_SECTIONS.add(SectionPos.asLong(pos)));
         }
     }
 
     static void onLevelLoad(ClientLevel level) {
         reset();
         activeLevel = level;
+        AtmosSwayDiagnostics.levelLoaded(level);
     }
 
     static void onLevelUnload(ClientLevel level) {
         if (activeLevel == level) {
+            AtmosSwayDiagnostics.levelUnloaded(level);
             reset();
         }
     }
@@ -57,32 +59,41 @@ public final class AmbientWindController {
         boolean enabled = com.atmossway.config.AtmosSwayConfig.ENABLED.get();
         currentWind = enabled ? sampled : WindForceMath.WindForce.NONE;
 
+        boolean enabledChanged = enabled != renderedEnabled;
         if (WindForceMath.needsRefresh(
                 currentWind, renderedWind, enabled, renderedEnabled, REFRESH_THRESHOLD
         )) {
-            refreshVisibleSections(minecraft, level);
+            String reason = enabledChanged ? (enabled ? "enabled" : "disabled") : "wind_delta";
+            refreshVisibleSections(minecraft, level, reason);
             renderedWind = currentWind;
             renderedEnabled = enabled;
         }
+        AtmosSwayDiagnostics.maybeLog(level.getGameTime(), SWAY_SECTIONS.size(), enabled);
     }
 
-    private static void refreshVisibleSections(Minecraft minecraft, ClientLevel level) {
+    private static void refreshVisibleSections(Minecraft minecraft, ClientLevel level, String reason) {
         int playerSectionX = SectionPos.blockToSectionCoord(minecraft.player.getBlockX());
         int playerSectionZ = SectionPos.blockToSectionCoord(minecraft.player.getBlockZ());
         int renderDistance = minecraft.options.getEffectiveRenderDistance();
 
-        SWAY_SECTIONS.removeIf(packed -> {
+        int refreshed = 0;
+        int evicted = 0;
+        for (long packed : SWAY_SECTIONS) {
             SectionPos section = SectionPos.of(packed);
             boolean inView = Math.abs(section.x() - playerSectionX) <= renderDistance
                     && Math.abs(section.z() - playerSectionZ) <= renderDistance;
             boolean loaded = level.hasChunk(section.x(), section.z());
             if (!inView || !loaded) {
-                return true;
+                if (SWAY_SECTIONS.remove(packed)) {
+                    evicted++;
+                }
+                continue;
             }
 
             level.setSectionDirtyWithNeighbors(section.x(), section.y(), section.z());
-            return false;
-        });
+            refreshed++;
+        }
+        AtmosSwayDiagnostics.sectionsRefreshed(reason, refreshed, evicted);
     }
 
     private static void reset() {
@@ -92,5 +103,6 @@ public final class AmbientWindController {
         renderedWind = WindForceMath.WindForce.NONE;
         renderedEnabled = false;
         AtmosphereWindCache.reset();
+        AtmosSwayDiagnostics.resetState();
     }
 }

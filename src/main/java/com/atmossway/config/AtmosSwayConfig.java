@@ -5,6 +5,7 @@ import net.neoforged.neoforge.common.ModConfigSpec;
 public final class AtmosSwayConfig {
     public static final ModConfigSpec SPEC;
     public static final ModConfigSpec.BooleanValue ENABLED;
+    public static final ModConfigSpec.BooleanValue DEBUG_LOGGING;
     public static final ModConfigSpec.DoubleValue WIND_STRENGTH_SCALE;
     public static final ModConfigSpec.DoubleValue MAX_WIND_INTENSITY;
     public static final ModConfigSpec.IntValue SAMPLE_INTERVAL_TICKS;
@@ -17,6 +18,9 @@ public final class AtmosSwayConfig {
         ENABLED = builder
                 .comment("Enable Project Atmosphere wind deformation.")
                 .define("enabled", true);
+        DEBUG_LOGGING = builder
+                .comment("Log a rate-limited diagnostic summary for wind sampling and foliage rendering.")
+                .define("debugLogging", false);
         WIND_STRENGTH_SCALE = builder
                 .comment("SWAY force contributed per metre per second of surface wind.")
                 .defineInRange("windStrengthScale", 0.08D, 0.0D, 1.0D);

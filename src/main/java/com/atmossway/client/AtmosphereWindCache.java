@@ -34,6 +34,9 @@ final class AtmosphereWindCache {
                     AtmosSwayConfig.WIND_STRENGTH_SCALE.get(),
                     AtmosSwayConfig.MAX_WIND_INTENSITY.get()
             );
+            AtmosSwayDiagnostics.windSample(
+                    region, gameTime, sample.speedMps(), sample.directionDeg(), cached
+            );
             lastRegion = region;
             lastSampleTick = gameTime;
         }

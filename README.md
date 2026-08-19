@@ -29,10 +29,15 @@ NeoForge creates `config/atmossway-client.toml` after the first launch:
 ```toml
 [wind]
 enabled = true
+debugLogging = false
 windStrengthScale = 0.08
 maxWindIntensity = 1.5
 sampleIntervalTicks = 1
 ```
+
+Set `debugLogging = true` to emit one aggregate diagnostic line every 100 client ticks. The summary reports the latest Project Atmosphere sample and force, SWAY model-hook activity, resolved render regions, qualifying and wind-applied models, contact combinations, and tracked/refreshed/evicted render sections. AtmosSway never logs once per block.
+
+An unexpected render-view type or repeated inability to resolve the client level is always logged once as a warning because it indicates that ambient wind cannot reach those models.
 
 Ambient wind covers SWAY-compatible blocks in loaded render sections throughout Minecraft's effective view distance. Sections are rebuilt only after a meaningful wind change, when AtmosSway is toggled, or as new terrain is loaded.
 

@@ -4,6 +4,23 @@ AtmosSway is a small client-side compatibility mod for Minecraft 1.21.1 on NeoFo
 
 Wind and contact forces are combined as vectors: motion in the same direction becomes stronger, angled forces produce a combined direction, and opposing forces can partially cancel.
 
+To keep nearby foliage from forming one perfectly uniform lean, AtmosSway gives each plant a
+deterministic spatial variation of up to 8 degrees and 10 percent ambient-wind strength. The value
+comes from the plant's position, so it remains stable across rebuilds and adds no recurring render
+work. SWAY multiblock structures share their pipeline-defined anchor, keeping vines, double plants,
+and sugar cane visually continuous. Contact forces are added after this variation and are not
+randomized.
+
+Foliage near the player also receives a subtle five-second animated wave. It adds up to `0.055`
+SWAY force across the wind and `0.025` along the wind, providing visible movement during light wind
+while smoothly fading to no animation at calm. Animation is limited to swayable sections within two
+sections horizontally and vertically. The six nearest qualifying sections animate continuously at a
+budget of at most three exact-section rebuilds per client tick, producing a new pose every two ticks
+under a full workload. Smaller sets update every tick. Distant foliage keeps its stable wind pose.
+This prioritizes smoother nearby movement without increasing the rebuild ceiling. SWAY deforms baked
+terrain geometry, so poses cannot be interpolated independently on every rendered frame without a
+separate shader-driven rendering path.
+
 ## Requirements
 
 - Minecraft 1.21.1
@@ -33,9 +50,21 @@ debugLogging = false
 windStrengthScale = 0.08
 maxWindIntensity = 1.5
 sampleIntervalTicks = 1
+stabilizationWindowTicks = 100
+renderChangeThreshold = 0.05
 ```
 
-Set `debugLogging = true` to emit one aggregate diagnostic line every 100 client ticks. The summary reports the latest Project Atmosphere sample and force, SWAY model-hook activity, resolved render regions, qualifying and wind-applied models, contact combinations, and tracked/refreshed/evicted render sections. AtmosSway never logs once per block.
+AtmosSway averages Project Atmosphere's raw surface-wind vector over
+`stabilizationWindowTicks`, then holds that exact deformation until the averaged vector differs
+from the rendered wind by at least `renderChangeThreshold`. The defaults respond to sustained
+changes in about five seconds while filtering short gust spikes that would otherwise pulse baked
+foliage geometry and repeatedly rebuild render sections.
+
+`sampleIntervalTicks` controls how often Project Atmosphere is queried. Cached samples are
+time-weighted across the stabilization window, so increasing the sampling interval does not shorten
+the five-second hold. New chunks use the same committed wind as existing chunks.
+
+Set `debugLogging = true` to emit one aggregate diagnostic line every 100 client ticks. The summary reports the raw Project Atmosphere sample, completed window average, committed render wind, accepted and suppressed updates, animation pose, observed pose-step ticks and pass activity, the active-section cap and rebuild budget, active crosswind and along-wind animation envelopes, SWAY model-hook activity, contact combinations, and exact section invalidations. AtmosSway never logs once per block.
 
 An unexpected render-view type or repeated inability to resolve the client level is always logged once as a warning because it indicates that ambient wind cannot reach those models.
 

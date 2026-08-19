@@ -1,5 +1,6 @@
 package com.atmossway.client;
 
+import com.atmossway.config.AtmosSwayConfig;
 import com.github.razorplay01.sway.api.SwayAPI;
 import com.github.razorplay01.sway.api.behavior.BehaviorPipeline;
 import com.github.razorplay01.sway.client.SwayData;
@@ -48,6 +49,17 @@ public final class SwayWindModelBridge {
         if (!wind.isPresent()) {
             return original;
         }
+        BlockPos variationAnchor = WindVariationAnchorResolver.resolve(pipeline, state, pos);
+        WindForceMath.WindForce variedWind = WindSpatialVariation.apply(
+                wind,
+                variationAnchor.asLong(),
+                AtmosSwayConfig.MAX_WIND_INTENSITY.get().floatValue(),
+                AmbientWindController.animationPoseTick()
+        );
+        if (!variedWind.isPresent()) {
+            return original;
+        }
+        AtmosSwayDiagnostics.spatialVariationApplied();
 
         SwayData contactData = original.get(SwayModel.SWAY_DATA);
         SwayData interpolatedContact = contactData == null
@@ -61,7 +73,7 @@ public final class SwayWindModelBridge {
                         interpolatedContact.intensity
                 );
         float cap = Math.max(0.0F, SwayConfig.INSTANCE.intensity * 2.0F);
-        WindForceMath.WindForce combined = WindForceMath.vectorSumCapped(contact, wind, cap);
+        WindForceMath.WindForce combined = WindForceMath.vectorSumCapped(contact, variedWind, cap);
         AtmosSwayDiagnostics.windApplied(contact.isPresent());
         SwayData result = new SwayData(combined.x(), combined.z(), combined.intensity());
 

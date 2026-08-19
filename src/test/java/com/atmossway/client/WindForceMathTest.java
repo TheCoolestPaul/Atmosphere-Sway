@@ -70,20 +70,13 @@ class WindForceMathTest {
     }
 
     @Test
-    void refreshesAdaptivelyAndOnToggle() {
-        var rendered = WindForceMath.WindForce.NONE;
-        var belowThreshold = new WindForceMath.WindForce(1.0F, 0.0F, 0.009F);
-        var atThreshold = new WindForceMath.WindForce(1.0F, 0.0F, 0.01F);
+    void reconstructsForceFromCartesianComponents() {
+        var force = WindForceMath.fromComponents(0.3F, -0.4F);
 
-        assertFalse(WindForceMath.needsRefresh(
-                belowThreshold, rendered, true, true, 0.01F
-        ));
-        assertTrue(WindForceMath.needsRefresh(
-                atThreshold, rendered, true, true, 0.01F
-        ));
-        assertTrue(WindForceMath.needsRefresh(
-                rendered, rendered, false, true, 0.01F
-        ));
+        assertEquals(0.5F, force.intensity(), EPSILON);
+        assertEquals(0.3F, force.forceX(), EPSILON);
+        assertEquals(-0.4F, force.forceZ(), EPSILON);
+        assertFalse(WindForceMath.fromComponents(Float.NaN, 1.0F).isPresent());
     }
 
     private static void assertForce(float expectedX, float expectedZ, WindForceMath.WindForce actual) {

@@ -43,16 +43,21 @@ public final class WindForceMath {
         return new WindForce(combined.x(), combined.z(), maximumIntensity);
     }
 
+    public static WindForce fromComponents(float forceX, float forceZ) {
+        if (!Float.isFinite(forceX) || !Float.isFinite(forceZ)) {
+            return WindForce.NONE;
+        }
+        float intensity = (float) Math.sqrt(forceX * forceX + forceZ * forceZ);
+        if (!Float.isFinite(intensity) || intensity <= 0.001F) {
+            return WindForce.NONE;
+        }
+        return new WindForce(forceX / intensity, forceZ / intensity, intensity);
+    }
+
     public static float vectorDelta(WindForce first, WindForce second) {
         float dx = first.x() * first.intensity() - second.x() * second.intensity();
         float dz = first.z() * first.intensity() - second.z() * second.intensity();
         return (float) Math.sqrt(dx * dx + dz * dz);
-    }
-
-    public static boolean needsRefresh(WindForce current, WindForce rendered,
-                                       boolean enabled, boolean wasEnabled,
-                                       float threshold) {
-        return enabled != wasEnabled || vectorDelta(current, rendered) >= threshold;
     }
 
     public record WindForce(float x, float z, float intensity) {
@@ -60,6 +65,14 @@ public final class WindForceMath {
 
         public boolean isPresent() {
             return intensity > 0.001F;
+        }
+
+        public float forceX() {
+            return x * intensity;
+        }
+
+        public float forceZ() {
+            return z * intensity;
         }
     }
 }

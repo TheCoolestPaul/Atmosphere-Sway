@@ -20,15 +20,27 @@ final class AtmosSwayDiagnostics {
     private static final LongAdder UNRESOLVED_LEVELS = new LongAdder();
     private static final LongAdder QUALIFYING_BLOCKS = new LongAdder();
     private static final LongAdder WIND_APPLICATIONS = new LongAdder();
+    private static final LongAdder SPATIAL_VARIATIONS = new LongAdder();
     private static final LongAdder CONTACT_COMBINATIONS = new LongAdder();
     private static final LongAdder NEW_SECTIONS = new LongAdder();
     private static final LongAdder REFRESHED_SECTIONS = new LongAdder();
     private static final LongAdder EVICTED_SECTIONS = new LongAdder();
+    private static final LongAdder WIND_COMMITS = new LongAdder();
+    private static final LongAdder SUPPRESSED_WINDOWS = new LongAdder();
+    private static final LongAdder ANIMATION_PASSES = new LongAdder();
+    private static final LongAdder ANIMATION_INVALIDATIONS = new LongAdder();
     private static final AtomicLong TOTAL_UNRESOLVED = new AtomicLong();
     private static final Set<String> WARNED_KEYS = ConcurrentHashMap.newKeySet();
 
     private static volatile SampleSnapshot latestSample = SampleSnapshot.NONE;
+    private static volatile ForceSnapshot latestAverage = ForceSnapshot.NONE;
+    private static volatile ForceSnapshot committedWind = ForceSnapshot.NONE;
+    private static volatile String lastCommitReason = "none";
     private static volatile String lastRefreshReason = "none";
+    private static volatile long latestAnimationPoseTick;
+    private static volatile long previousAnimationPoseTick = Long.MIN_VALUE;
+    private static volatile long latestAnimationPoseStepTicks;
+    private static volatile int activeAnimationSections;
     private static long lastSummaryTick = Long.MIN_VALUE;
 
     private AtmosSwayDiagnostics() {
@@ -75,6 +87,10 @@ final class AtmosSwayDiagnostics {
         }
     }
 
+    static void spatialVariationApplied() {
+        SPATIAL_VARIATIONS.increment();
+    }
+
     static void sectionTracked(boolean newlyTracked) {
         if (newlyTracked) {
             NEW_SECTIONS.increment();
@@ -85,7 +101,7 @@ final class AtmosSwayDiagnostics {
         lastRefreshReason = reason;
         REFRESHED_SECTIONS.add(refreshed);
         EVICTED_SECTIONS.add(evicted);
-        if (debugEnabled() && !"wind_delta".equals(reason)) {
+        if (debugEnabled() && !"sustained_wind".equals(reason)) {
             AtmosSway.LOGGER.info(
                     "Wind refresh reason={} refreshedSections={} evictedSections={}",
                     reason, refreshed, evicted
@@ -94,11 +110,56 @@ final class AtmosSwayDiagnostics {
     }
 
     static void windSample(RegionInstanceKey region, long tick, float speedMps,
-                           float directionDeg, WindForceMath.WindForce force) {
+                           float directionDeg, WindForceMath.WindForce force, boolean valid) {
         latestSample = new SampleSnapshot(
                 String.valueOf(region), tick, speedMps, directionDeg,
-                force.x(), force.z(), force.intensity()
+                force.forceX(), force.forceZ(), force.intensity(), valid
         );
+    }
+
+    static void windWindow(WindForceMath.WindForce average,
+                           WindForceMath.WindForce committed, boolean accepted) {
+        latestAverage = ForceSnapshot.from(average);
+        if (accepted) {
+            committedWind = ForceSnapshot.from(committed);
+            lastCommitReason = "sustained_wind";
+            WIND_COMMITS.increment();
+        } else {
+            SUPPRESSED_WINDOWS.increment();
+        }
+    }
+
+    static void windCommitted(WindForceMath.WindForce committed, String reason) {
+        committedWind = ForceSnapshot.from(committed);
+        lastCommitReason = reason;
+        WIND_COMMITS.increment();
+    }
+
+    static void animationPassStarted(long poseTick, int activeSections) {
+        long previousPoseTick = previousAnimationPoseTick;
+        latestAnimationPoseStepTicks = previousPoseTick == Long.MIN_VALUE || poseTick < previousPoseTick
+                ? 0L
+                : poseTick - previousPoseTick;
+        previousAnimationPoseTick = poseTick;
+        latestAnimationPoseTick = poseTick;
+        activeAnimationSections = activeSections;
+    }
+
+    static void animationPassCompleted() {
+        ANIMATION_PASSES.increment();
+    }
+
+    static void animationSectionsInvalidated(int count) {
+        ANIMATION_INVALIDATIONS.add(count);
+    }
+
+    static void animationState(long poseTick, int activeSections) {
+        if (activeSections == 0) {
+            previousAnimationPoseTick = Long.MIN_VALUE;
+            latestAnimationPoseStepTicks = 0L;
+        }
+        latestAnimationPoseTick = poseTick;
+        activeAnimationSections = activeSections;
     }
 
     static void levelLoaded(ClientLevel level) {
@@ -125,17 +186,38 @@ final class AtmosSwayDiagnostics {
                 || gameTick - lastSummaryTick >= SUMMARY_INTERVAL_TICKS) {
             lastSummaryTick = gameTick;
             SampleSnapshot sample = latestSample;
+            ForceSnapshot average = latestAverage;
+            ForceSnapshot committed = committedWind;
             AtmosSway.LOGGER.info(
                     "Wind diagnostics enabled={} sampleTick={} region={} speedMps={} directionDeg={} "
-                            + "force=({},{}) intensity={} hooks={} directLevels={} renderRegions={} "
-                            + "unresolved={} qualifying={} applied={} contactCombined={} newSections={} "
-                            + "trackedSections={} refreshedSections={} evictedSections={} lastRefresh={}",
+                            + "rawValid={} rawForce=({},{}) rawIntensity={} averageForce=({},{}) "
+                            + "averageIntensity={} committedForce=({},{}) committedIntensity={} "
+                            + "windCommits={} suppressedWindows={} lastCommit={} "
+                            + "animationPoseTick={} animationPoseStepTicks={} animationSections={} "
+                            + "animationPasses={} "
+                            + "animationInvalidations={} animationCrossEnvelope={} "
+                            + "animationAlongEnvelope={} animationSectionCap={} "
+                            + "animationBudgetPerTick={} "
+                            + "hooks={} directLevels={} renderRegions={} "
+                            + "unresolved={} qualifying={} applied={} spatiallyVaried={} "
+                            + "contactCombined={} newSections={} "
+                            + "trackedSections={} exactInvalidations={} evictedSections={} lastRefresh={}",
                     enabled, sample.tick(), sample.region(), sample.speedMps(), sample.directionDeg(),
-                    sample.forceX(), sample.forceZ(), sample.intensity(),
+                    sample.valid(), sample.forceX(), sample.forceZ(), sample.intensity(),
+                    average.forceX(), average.forceZ(), average.intensity(),
+                    committed.forceX(), committed.forceZ(), committed.intensity(),
+                    WIND_COMMITS.sumThenReset(), SUPPRESSED_WINDOWS.sumThenReset(), lastCommitReason,
+                    latestAnimationPoseTick, latestAnimationPoseStepTicks, activeAnimationSections,
+                    ANIMATION_PASSES.sumThenReset(), ANIMATION_INVALIDATIONS.sumThenReset(),
+                    WindSpatialVariation.crosswindEnvelope(committed.intensity()),
+                    WindSpatialVariation.alongWindEnvelope(committed.intensity()),
+                    NearestSectionSelector.MAX_SECTIONS,
+                    WindAnimationScheduler.SECTIONS_PER_TICK,
                     MODEL_HOOKS.sumThenReset(), DIRECT_LEVELS.sumThenReset(),
                     RENDER_REGIONS.sumThenReset(), UNRESOLVED_LEVELS.sumThenReset(),
                     QUALIFYING_BLOCKS.sumThenReset(), WIND_APPLICATIONS.sumThenReset(),
-                    CONTACT_COMBINATIONS.sumThenReset(), NEW_SECTIONS.sumThenReset(),
+                    SPATIAL_VARIATIONS.sumThenReset(), CONTACT_COMBINATIONS.sumThenReset(),
+                    NEW_SECTIONS.sumThenReset(),
                     trackedSections, REFRESHED_SECTIONS.sumThenReset(),
                     EVICTED_SECTIONS.sumThenReset(), lastRefreshReason
             );
@@ -159,21 +241,41 @@ final class AtmosSwayDiagnostics {
         UNRESOLVED_LEVELS.reset();
         QUALIFYING_BLOCKS.reset();
         WIND_APPLICATIONS.reset();
+        SPATIAL_VARIATIONS.reset();
         CONTACT_COMBINATIONS.reset();
         NEW_SECTIONS.reset();
         REFRESHED_SECTIONS.reset();
         EVICTED_SECTIONS.reset();
+        WIND_COMMITS.reset();
+        SUPPRESSED_WINDOWS.reset();
+        ANIMATION_PASSES.reset();
+        ANIMATION_INVALIDATIONS.reset();
         TOTAL_UNRESOLVED.set(0L);
         WARNED_KEYS.clear();
         latestSample = SampleSnapshot.NONE;
+        latestAverage = ForceSnapshot.NONE;
+        committedWind = ForceSnapshot.NONE;
+        lastCommitReason = "none";
         lastRefreshReason = "none";
+        latestAnimationPoseTick = 0L;
+        previousAnimationPoseTick = Long.MIN_VALUE;
+        latestAnimationPoseStepTicks = 0L;
+        activeAnimationSections = 0;
         lastSummaryTick = Long.MIN_VALUE;
     }
 
     private record SampleSnapshot(String region, long tick, float speedMps, float directionDeg,
-                                  float forceX, float forceZ, float intensity) {
+                                  float forceX, float forceZ, float intensity, boolean valid) {
         private static final SampleSnapshot NONE = new SampleSnapshot(
-                "none", Long.MIN_VALUE, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F
+                "none", Long.MIN_VALUE, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, false
         );
+    }
+
+    private record ForceSnapshot(float forceX, float forceZ, float intensity) {
+        private static final ForceSnapshot NONE = new ForceSnapshot(0.0F, 0.0F, 0.0F);
+
+        private static ForceSnapshot from(WindForceMath.WindForce force) {
+            return new ForceSnapshot(force.forceX(), force.forceZ(), force.intensity());
+        }
     }
 }

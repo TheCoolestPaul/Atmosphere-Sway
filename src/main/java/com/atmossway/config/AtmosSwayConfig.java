@@ -9,6 +9,8 @@ public final class AtmosSwayConfig {
     public static final ModConfigSpec.DoubleValue WIND_STRENGTH_SCALE;
     public static final ModConfigSpec.DoubleValue MAX_WIND_INTENSITY;
     public static final ModConfigSpec.IntValue SAMPLE_INTERVAL_TICKS;
+    public static final ModConfigSpec.IntValue STABILIZATION_WINDOW_TICKS;
+    public static final ModConfigSpec.DoubleValue RENDER_CHANGE_THRESHOLD;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -30,6 +32,12 @@ public final class AtmosSwayConfig {
         SAMPLE_INTERVAL_TICKS = builder
                 .comment("How often Project Atmosphere wind is sampled, in client ticks.")
                 .defineInRange("sampleIntervalTicks", 1, 1, 200);
+        STABILIZATION_WINDOW_TICKS = builder
+                .comment("Number of client game ticks averaged before considering a rendered wind update.")
+                .defineInRange("stabilizationWindowTicks", 100, 20, 400);
+        RENDER_CHANGE_THRESHOLD = builder
+                .comment("Minimum SWAY force-vector change required to rebuild foliage sections.")
+                .defineInRange("renderChangeThreshold", 0.05D, 0.0D, 1.0D);
 
         builder.pop();
         SPEC = builder.build();

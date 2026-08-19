@@ -32,6 +32,10 @@ change, at a secondary budget of two exact sections per tick and no more than on
 per ten ticks. The combined animation and gust ceiling is therefore five invalidations per tick.
 Distant foliage continues using only the stable five-second wind latch.
 
+When that five-second latch accepts a new baseline, the six animated sections retain their previous
+pose and blend out the commit-induced vector difference over 20 ticks. Their existing two-tick pose
+cadence supplies roughly ten intermediate poses without adding section rebuilds or delaying new gusts.
+
 Project Atmosphere's native rain and snow columns follow its raw surface-wind direction through a
 frame-interpolated, visual-safe top offset. The offset uses
 `2 * speedMps / (speedMps + 6)` blocks, so calm precipitation stays vertical and extreme wind
@@ -87,7 +91,7 @@ near-field gust response described above; no additional gust configuration is re
 time-weighted across the stabilization window, so increasing the sampling interval does not shorten
 the five-second hold. New chunks use the same committed wind as existing chunks.
 
-Set `debugLogging = true` to emit one aggregate diagnostic line every 100 client ticks. The summary reports the raw Project Atmosphere sample, completed window average, committed render wind, fast-smoothed wind, gust adjustment, final nearby wind, gust propagation queue and invalidations, animation pose, observed pose-step ticks and pass activity, the active-section cap and rebuild budget, precipitation renderer/speed/heading/tilt/native offset, active crosswind and along-wind animation envelopes, executed and suppressed SWAY scans, section-build snapshots, SWAY model-hook activity, contact combinations, and exact section invalidations. AtmosSway never logs once per block or precipitation streak.
+Set `debugLogging = true` to emit one aggregate diagnostic line every 100 client ticks. The summary reports the raw Project Atmosphere sample, completed window average, committed render wind, fast-smoothed wind, gust adjustment, propagation target, displayed animation wind, commit-transition correction/progress, gust propagation queue and invalidations, animation pose, observed pose-step ticks and pass activity, the active-section cap and rebuild budget, precipitation renderer/speed/heading/tilt/native offset, active crosswind and along-wind animation envelopes, executed and suppressed SWAY scans, section-build snapshots, SWAY model-hook activity, contact combinations, and exact section invalidations. AtmosSway never logs once per block or precipitation streak.
 
 An unexpected render-view type or repeated inability to resolve the client level is always logged once as a warning because it indicates that ambient wind cannot reach those models.
 

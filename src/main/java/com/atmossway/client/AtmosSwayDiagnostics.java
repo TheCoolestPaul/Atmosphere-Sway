@@ -46,6 +46,10 @@ final class AtmosSwayDiagnostics {
     private static volatile ForceSnapshot fastSmoothedWind = ForceSnapshot.NONE;
     private static volatile ForceSnapshot gustAdjustment = ForceSnapshot.NONE;
     private static volatile ForceSnapshot nearbyWind = ForceSnapshot.NONE;
+    private static volatile ForceSnapshot animationWind = ForceSnapshot.NONE;
+    private static volatile ForceSnapshot transitionCorrection = ForceSnapshot.NONE;
+    private static volatile float transitionProgress = 1.0F;
+    private static volatile int transitionRemainingTicks;
     private static volatile String lastCommitReason = "none";
     private static volatile String lastRefreshReason = "none";
     private static volatile long latestAnimationPoseTick;
@@ -179,10 +183,17 @@ final class AtmosSwayDiagnostics {
 
     static void gustState(WindForceMath.WindForce smoothed,
                           WindForceMath.WindForce adjustment,
-                          WindForceMath.WindForce nearby) {
+                          WindForceMath.WindForce nearby,
+                          WindForceMath.WindForce animated,
+                          WindForceMath.WindForce correction,
+                          float progress, int remainingTicks) {
         fastSmoothedWind = ForceSnapshot.from(smoothed);
         gustAdjustment = ForceSnapshot.from(adjustment);
         nearbyWind = ForceSnapshot.from(nearby);
+        animationWind = ForceSnapshot.from(animated);
+        transitionCorrection = ForceSnapshot.from(correction);
+        transitionProgress = progress;
+        transitionRemainingTicks = remainingTicks;
     }
 
     static void gustPropagationStarted(int sectionCount) {
@@ -268,12 +279,17 @@ final class AtmosSwayDiagnostics {
             ForceSnapshot fast = fastSmoothedWind;
             ForceSnapshot adjustment = gustAdjustment;
             ForceSnapshot nearby = nearbyWind;
+            ForceSnapshot animated = animationWind;
+            ForceSnapshot correction = transitionCorrection;
             AtmosSway.LOGGER.info(
                     "Wind diagnostics enabled={} sampleTick={} region={} speedMps={} directionDeg={} "
                             + "rawValid={} rawForce=({},{}) rawIntensity={} averageForce=({},{}) "
                             + "averageIntensity={} committedForce=({},{}) committedIntensity={} "
                             + "fastForce=({},{}) fastIntensity={} gustAdjustment=({},{}) "
                             + "gustAdjustmentIntensity={} nearbyForce=({},{}) nearbyIntensity={} "
+                            + "animationWind=({},{}) animationWindIntensity={} "
+                            + "transitionCorrection=({},{}) transitionCorrectionIntensity={} "
+                            + "transitionProgress={} transitionRemainingTicks={} "
                             + "windCommits={} suppressedWindows={} lastCommit={} "
                             + "animationPoseTick={} animationPoseStepTicks={} animationSections={} "
                             + "animationPasses={} "
@@ -300,11 +316,14 @@ final class AtmosSwayDiagnostics {
                     fast.forceX(), fast.forceZ(), fast.intensity(),
                     adjustment.forceX(), adjustment.forceZ(), adjustment.intensity(),
                     nearby.forceX(), nearby.forceZ(), nearby.intensity(),
+                    animated.forceX(), animated.forceZ(), animated.intensity(),
+                    correction.forceX(), correction.forceZ(), correction.intensity(),
+                    transitionProgress, transitionRemainingTicks,
                     WIND_COMMITS.sumThenReset(), SUPPRESSED_WINDOWS.sumThenReset(), lastCommitReason,
                     latestAnimationPoseTick, latestAnimationPoseStepTicks, activeAnimationSections,
                     ANIMATION_PASSES.sumThenReset(), ANIMATION_INVALIDATIONS.sumThenReset(),
-                    WindSpatialVariation.crosswindEnvelope(nearby.intensity()),
-                    WindSpatialVariation.alongWindEnvelope(nearby.intensity()),
+                    WindSpatialVariation.crosswindEnvelope(animated.intensity()),
+                    WindSpatialVariation.alongWindEnvelope(animated.intensity()),
                     NearestSectionSelector.MAX_SECTIONS,
                     WindAnimationScheduler.SECTIONS_PER_TICK,
                     GUST_PROPAGATIONS.sumThenReset(), GUST_INVALIDATIONS.sumThenReset(),
@@ -370,6 +389,10 @@ final class AtmosSwayDiagnostics {
         fastSmoothedWind = ForceSnapshot.NONE;
         gustAdjustment = ForceSnapshot.NONE;
         nearbyWind = ForceSnapshot.NONE;
+        animationWind = ForceSnapshot.NONE;
+        transitionCorrection = ForceSnapshot.NONE;
+        transitionProgress = 1.0F;
+        transitionRemainingTicks = 0;
         lastCommitReason = "none";
         lastRefreshReason = "none";
         latestAnimationPoseTick = 0L;

@@ -25,10 +25,10 @@ public final class AtmosSwayConfig {
                 .define("debugLogging", false);
         WIND_STRENGTH_SCALE = builder
                 .comment("SWAY force contributed per metre per second of surface wind.")
-                .defineInRange("windStrengthScale", 0.08D, 0.0D, 1.0D);
+                .defineInRange("windStrengthScale", 0.10D, 0.0D, 1.0D);
         MAX_WIND_INTENSITY = builder
                 .comment("Maximum SWAY intensity contributed by wind.")
-                .defineInRange("maxWindIntensity", 1.5D, 0.0D, 5.0D);
+                .defineInRange("maxWindIntensity", 2.0D, 0.0D, 5.0D);
         SAMPLE_INTERVAL_TICKS = builder
                 .comment("How often Project Atmosphere wind is sampled, in client ticks.")
                 .defineInRange("sampleIntervalTicks", 1, 1, 200);

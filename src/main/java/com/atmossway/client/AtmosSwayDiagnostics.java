@@ -149,10 +149,13 @@ final class AtmosSwayDiagnostics {
     }
 
     static void windSample(RegionInstanceKey region, long tick, float speedMps,
-                           float directionDeg, WindForceMath.WindForce force, boolean valid) {
+                           float directionDeg, WindForceMath.WindForce force, boolean valid,
+                           String source, long syncAgeTicks, String syncMatch,
+                           long packetsReceived, long packetsRejected) {
         latestSample = new SampleSnapshot(
                 String.valueOf(region), tick, speedMps, directionDeg,
-                force.forceX(), force.forceZ(), force.intensity(), valid
+                force.forceX(), force.forceZ(), force.intensity(), valid,
+                source, syncAgeTicks, syncMatch, packetsReceived, packetsRejected
         );
     }
 
@@ -281,7 +284,9 @@ final class AtmosSwayDiagnostics {
             ForceSnapshot correction = transitionCorrection;
             AtmosSway.LOGGER.info(
                     "Wind diagnostics enabled={} sampleTick={} region={} speedMps={} directionDeg={} "
-                            + "rawValid={} rawForce=({},{}) rawIntensity={} averageForce=({},{}) "
+                            + "rawValid={} windSource={} syncAgeTicks={} syncMatch={} "
+                            + "syncPacketsReceived={} syncPacketsRejected={} "
+                            + "rawForce=({},{}) rawIntensity={} averageForce=({},{}) "
                             + "averageIntensity={} committedForce=({},{}) committedIntensity={} "
                             + "fastForce=({},{}) fastIntensity={} gustAdjustment=({},{}) "
                             + "gustAdjustmentIntensity={} nearbyForce=({},{}) nearbyIntensity={} "
@@ -305,7 +310,9 @@ final class AtmosSwayDiagnostics {
                             + "contactCombined={} newSections={} "
                             + "trackedSections={} exactInvalidations={} evictedSections={} lastRefresh={}",
                     enabled, sample.tick(), sample.region(), sample.speedMps(), sample.directionDeg(),
-                    sample.valid(), sample.forceX(), sample.forceZ(), sample.intensity(),
+                    sample.valid(), sample.source(), sample.syncAgeTicks(), sample.syncMatch(),
+                    sample.packetsReceived(), sample.packetsRejected(),
+                    sample.forceX(), sample.forceZ(), sample.intensity(),
                     average.forceX(), average.forceZ(), average.intensity(),
                     committed.forceX(), committed.forceZ(), committed.intensity(),
                     fast.forceX(), fast.forceZ(), fast.intensity(),
@@ -399,9 +406,12 @@ final class AtmosSwayDiagnostics {
     }
 
     private record SampleSnapshot(String region, long tick, float speedMps, float directionDeg,
-                                  float forceX, float forceZ, float intensity, boolean valid) {
+                                  float forceX, float forceZ, float intensity, boolean valid,
+                                  String source, long syncAgeTicks, String syncMatch,
+                                  long packetsReceived, long packetsRejected) {
         private static final SampleSnapshot NONE = new SampleSnapshot(
-                "none", Long.MIN_VALUE, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, false
+                "none", Long.MIN_VALUE, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, false,
+                "unavailable", Long.MAX_VALUE, "missing", 0L, 0L
         );
     }
 

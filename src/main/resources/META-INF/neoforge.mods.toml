@@ -39,7 +39,7 @@ modId = "projectatmosphere"
 type = "required"
 versionRange = "[0.9.1.2,0.10)"
 ordering = "AFTER"
-side = "CLIENT"
+side = "BOTH"
 
 [[dependencies."${mod_id}"]]
 modId = "simpleclouds"

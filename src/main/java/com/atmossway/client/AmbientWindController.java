@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
+import com.atmossway.network.ClientWindSyncState;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -94,7 +95,9 @@ public final class AmbientWindController {
             return;
         }
 
-        AtmosphereWindCache.Sample sample = AtmosphereWindCache.sample(level, minecraft.player);
+        AtmosphereWindCache.Sample sample = AtmosphereWindCache.sample(
+                level, minecraft.player, minecraft.hasSingleplayerServer()
+        );
         PrecipitationWindController.update(
                 sample.speedMps(), sample.directionDeg(), sample.valid()
         );
@@ -328,6 +331,7 @@ public final class AmbientWindController {
         AmbientRenderState.reset();
         SwayUpdateThrottle.reset();
         AtmosphereWindCache.reset();
+        ClientWindSyncState.reset();
         PrecipitationWindController.reset();
         AtmosSwayDiagnostics.resetState();
     }

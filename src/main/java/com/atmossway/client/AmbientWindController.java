@@ -7,6 +7,7 @@ import net.minecraft.core.SectionPos;
 
 import java.util.Set;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -17,6 +18,8 @@ public final class AmbientWindController {
     private static final SustainedWindLatch WIND_LATCH = new SustainedWindLatch();
     private static final WindAnimationScheduler ANIMATION_SCHEDULER = new WindAnimationScheduler();
     private static final FastGustFilter FAST_GUST_FILTER = new FastGustFilter();
+    private static final NearFieldWindTransition NEAR_FIELD_TRANSITION =
+            new NearFieldWindTransition();
     private static final GustPropagationScheduler GUST_SCHEDULER = new GustPropagationScheduler();
     private static final NearbyGustWorkList GUST_WORK = new NearbyGustWorkList();
     private static final Set<Long> NEAR_FIELD_TARGETS = new HashSet<>();
@@ -24,6 +27,7 @@ public final class AmbientWindController {
     private static volatile ClientLevel activeLevel;
     private static WindForceMath.WindForce currentWind = WindForceMath.WindForce.NONE;
     private static WindForceMath.WindForce nearbyWind = WindForceMath.WindForce.NONE;
+    private static WindForceMath.WindForce animationWind = WindForceMath.WindForce.NONE;
     private static WindForceMath.WindForce animationPassWind = WindForceMath.WindForce.NONE;
     private static long animationPoseTick;
     private static boolean renderedEnabled;
@@ -81,9 +85,11 @@ public final class AmbientWindController {
                 AtmosphereWindCache.reset();
                 currentWind = WindForceMath.WindForce.NONE;
                 nearbyWind = WindForceMath.WindForce.NONE;
+                animationWind = WindForceMath.WindForce.NONE;
                 AmbientRenderState.publishWind(currentWind);
                 clearNearFieldTargets();
                 FAST_GUST_FILTER.reset();
+                NEAR_FIELD_TRANSITION.reset();
                 GUST_SCHEDULER.reset();
                 renderedEnabled = false;
                 AtmosSwayDiagnostics.windCommitted(currentWind, "disabled");
@@ -115,6 +121,7 @@ public final class AmbientWindController {
             if (sample.valid()) {
                 WIND_LATCH.initialize(sample.force(), gameTick);
                 FAST_GUST_FILTER.initialize(sample.force());
+                NEAR_FIELD_TRANSITION.reset();
                 currentWind = WIND_LATCH.committed();
                 AmbientRenderState.publishWind(currentWind);
                 AtmosSwayDiagnostics.windCommitted(currentWind, "enabled");
@@ -123,6 +130,7 @@ public final class AmbientWindController {
         } else if (sample.regionChanged() && sample.valid()) {
             WIND_LATCH.initialize(sample.force(), gameTick);
             FAST_GUST_FILTER.initialize(sample.force());
+            NEAR_FIELD_TRANSITION.reset();
             resetNearFieldPropagation();
             currentWind = WIND_LATCH.committed();
             AmbientRenderState.publishWind(currentWind);
@@ -131,6 +139,7 @@ public final class AmbientWindController {
         } else if (!WIND_LATCH.initialized() && sample.valid()) {
             WIND_LATCH.initialize(sample.force(), gameTick);
             FAST_GUST_FILTER.initialize(sample.force());
+            NEAR_FIELD_TRANSITION.reset();
             currentWind = WIND_LATCH.committed();
             AmbientRenderState.publishWind(currentWind);
             AtmosSwayDiagnostics.windCommitted(currentWind, "first_valid_sample");
@@ -148,19 +157,33 @@ public final class AmbientWindController {
                 AtmosSwayDiagnostics.windWindow(result.average(), WIND_LATCH.committed(), result.committed());
             }
             if (result.committed()) {
+                float maximumIntensity = com.atmossway.config.AtmosSwayConfig
+                        .MAX_WIND_INTENSITY.get().floatValue();
+                WindForceMath.WindForce previousNearby = FAST_GUST_FILTER
+                        .snapshot(currentWind, maximumIntensity).nearby();
                 currentWind = WIND_LATCH.committed();
+                WindForceMath.WindForce nextNearby = FAST_GUST_FILTER
+                        .snapshot(currentWind, maximumIntensity).nearby();
+                NEAR_FIELD_TRANSITION.begin(gameTick, previousNearby, nextNearby);
                 AmbientRenderState.publishWind(currentWind);
-                resetNearFieldPropagation();
-                refreshVisibleSections(minecraft, level, "sustained_wind");
+                resetNearFieldPropagationPreservingAnimation();
+                refreshVisibleSections(minecraft, level, "sustained_wind", true);
             }
         }
+        float maximumIntensity = com.atmossway.config.AtmosSwayConfig
+                .MAX_WIND_INTENSITY.get().floatValue();
         FastGustFilter.Snapshot gust = FAST_GUST_FILTER.snapshot(
                 currentWind,
-                com.atmossway.config.AtmosSwayConfig.MAX_WIND_INTENSITY.get().floatValue()
+                maximumIntensity
         );
         nearbyWind = gust.nearby();
+        animationWind = NEAR_FIELD_TRANSITION.apply(gameTick, nearbyWind, maximumIntensity);
         GUST_SCHEDULER.observe(nearbyWind);
-        AtmosSwayDiagnostics.gustState(gust.smoothed(), gust.adjustment(), nearbyWind);
+        AtmosSwayDiagnostics.gustState(
+                gust.smoothed(), gust.adjustment(), nearbyWind, animationWind,
+                NEAR_FIELD_TRANSITION.correction(), NEAR_FIELD_TRANSITION.progress(),
+                NEAR_FIELD_TRANSITION.remainingTicks()
+        );
         updateAnimation(minecraft, level, gameTick, swayEnabled);
         updateGustPropagation(minecraft, level, gameTick, swayEnabled);
         AtmosSwayDiagnostics.maybeLog(gameTick, SWAY_SECTIONS.size(), true);
@@ -168,7 +191,7 @@ public final class AmbientWindController {
 
     private static void updateAnimation(Minecraft minecraft, ClientLevel level,
                                         long gameTick, boolean enabled) {
-        boolean animate = enabled && nearbyWind.isPresent();
+        boolean animate = enabled && animationWind.isPresent();
         if (!animate) {
             ANIMATION_SCHEDULER.prepare(gameTick, 0, false);
             if (ANIMATION_SECTIONS.size() > 0) {
@@ -212,7 +235,7 @@ public final class AmbientWindController {
         int batchCount = ANIMATION_SCHEDULER.prepare(gameTick, animationSectionCount, true);
         if (ANIMATION_SCHEDULER.passStartedThisTick()) {
             animationPoseTick = ANIMATION_SCHEDULER.poseTick();
-            animationPassWind = nearbyWind;
+            animationPassWind = animationWind;
             AtmosSwayDiagnostics.animationPassStarted(animationPoseTick, animationSectionCount);
         }
 
@@ -341,6 +364,11 @@ public final class AmbientWindController {
     }
 
     private static void refreshVisibleSections(Minecraft minecraft, ClientLevel level, String reason) {
+        refreshVisibleSections(minecraft, level, reason, false);
+    }
+
+    private static void refreshVisibleSections(Minecraft minecraft, ClientLevel level,
+                                               String reason, boolean preserveAnimationSections) {
         int playerSectionX = SectionPos.blockToSectionCoord(minecraft.player.getBlockX());
         int playerSectionZ = SectionPos.blockToSectionCoord(minecraft.player.getBlockZ());
         int renderDistance = minecraft.options.getEffectiveRenderDistance();
@@ -356,6 +384,9 @@ public final class AmbientWindController {
                 if (SWAY_SECTIONS.remove(packed)) {
                     evicted++;
                 }
+                continue;
+            }
+            if (preserveAnimationSections && ANIMATION_SECTIONS.contains(packed)) {
                 continue;
             }
 
@@ -377,6 +408,7 @@ public final class AmbientWindController {
         lastAnimationListTick = Long.MIN_VALUE;
         currentWind = WindForceMath.WindForce.NONE;
         nearbyWind = WindForceMath.WindForce.NONE;
+        animationWind = WindForceMath.WindForce.NONE;
         animationPassWind = WindForceMath.WindForce.NONE;
         animationPoseTick = 0L;
         renderedEnabled = false;
@@ -384,6 +416,7 @@ public final class AmbientWindController {
         WIND_LATCH.reset();
         ANIMATION_SCHEDULER.reset();
         FAST_GUST_FILTER.reset();
+        NEAR_FIELD_TRANSITION.reset();
         GUST_SCHEDULER.reset();
         GUST_WORK.reset();
         NEAR_FIELD_TARGETS.clear();
@@ -396,6 +429,19 @@ public final class AmbientWindController {
 
     private static void resetNearFieldPropagation() {
         clearNearFieldTargets();
+        GUST_SCHEDULER.reset();
+        GUST_SCHEDULER.membershipChanged();
+    }
+
+    private static void resetNearFieldPropagationPreservingAnimation() {
+        Iterator<Long> targets = NEAR_FIELD_TARGETS.iterator();
+        while (targets.hasNext()) {
+            long packed = targets.next();
+            if (!ANIMATION_SECTIONS.contains(packed)) {
+                AmbientRenderState.clearSectionTarget(packed);
+                targets.remove();
+            }
+        }
         GUST_SCHEDULER.reset();
         GUST_SCHEDULER.membershipChanged();
     }

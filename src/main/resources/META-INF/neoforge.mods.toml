@@ -30,13 +30,20 @@ side = "BOTH"
 [[dependencies."${mod_id}"]]
 modId = "sway"
 type = "required"
-versionRange = "[2.4.3,)"
+versionRange = "[2.4.3,2.5)"
 ordering = "AFTER"
 side = "CLIENT"
 
 [[dependencies."${mod_id}"]]
 modId = "projectatmosphere"
 type = "required"
-versionRange = "[0.9.1.2,)"
+versionRange = "[0.9.1.2,0.10)"
+ordering = "AFTER"
+side = "CLIENT"
+
+[[dependencies."${mod_id}"]]
+modId = "simpleclouds"
+type = "required"
+versionRange = "[0.7.3,0.8)"
 ordering = "AFTER"
 side = "CLIENT"

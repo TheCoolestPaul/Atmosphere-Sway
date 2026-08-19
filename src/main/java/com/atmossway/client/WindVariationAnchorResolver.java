@@ -10,13 +10,16 @@ final class WindVariationAnchorResolver {
     }
 
     static BlockPos resolve(BehaviorPipeline pipeline, BlockState state, BlockPos pos) {
+        BlockPos anchor = pos;
         for (MultiBlockContributor contributor : pipeline.getMultiBlockContributors()) {
             if (!contributor.appliesTo(state)) {
                 continue;
             }
-            BlockPos anchor = contributor.getAnchorPosition(pos, state);
-            return anchor == null ? pos : anchor;
+            BlockPos resolved = contributor.getAnchorPosition(anchor, state);
+            if (resolved != null) {
+                anchor = resolved;
+            }
         }
-        return pos;
+        return anchor;
     }
 }

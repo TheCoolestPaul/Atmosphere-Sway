@@ -19,14 +19,25 @@ budget of at most three exact-section rebuilds per client tick, producing a new 
 under a full workload. Smaller sets update every tick. Distant foliage keeps its stable wind pose.
 This prioritizes smoother nearby movement without increasing the rebuild ceiling. SWAY deforms baked
 terrain geometry, so poses cannot be interpolated independently on every rendered frame without a
-separate shader-driven rendering path.
+separate shader-driven rendering path. AtmosSway also limits SWAY's entity/contact scan to one run
+per client game tick and compensates its internal delta time, avoiding redundant high-FPS scans
+without changing contact decay speed.
+
+Project Atmosphere's native rain and snow columns follow its raw surface-wind direction through a
+frame-interpolated, visual-safe top offset. The offset uses
+`2 * speedMps / (speedMps + 6)` blocks, so calm precipitation stays vertical and extreme wind
+approaches a two-block displacement without opening large gaps in Atmosphere's limited render area.
+When Project Atmosphere does not own precipitation, the Simple Clouds fallback instead uses a
+physical `atan(windSpeed / 9 m/s)` tilt capped at 85 degrees. Both paths smooth the wind vector over
+roughly half a second. Disabling AtmosSway restores the renderer's original precipitation angle.
 
 ## Requirements
 
 - Minecraft 1.21.1
 - NeoForge 21.1.213 or newer in the 1.21.1 line
-- SWAY 2.4.3 or newer
-- Project Atmosphere 0.9.1.2 or newer
+- SWAY 2.4.3.x (before 2.5)
+- Project Atmosphere 0.9.1.2.x (before 0.10)
+- Simple Clouds 0.7.3.x
 - Project Atmosphere's required runtime stack, including Gabou's Libs, Simple Clouds, and a supported season system such as Serene Seasons
 
 AtmosSway is only needed on the client. Project Atmosphere may still require installation on both the client and server.
@@ -64,7 +75,7 @@ foliage geometry and repeatedly rebuild render sections.
 time-weighted across the stabilization window, so increasing the sampling interval does not shorten
 the five-second hold. New chunks use the same committed wind as existing chunks.
 
-Set `debugLogging = true` to emit one aggregate diagnostic line every 100 client ticks. The summary reports the raw Project Atmosphere sample, completed window average, committed render wind, accepted and suppressed updates, animation pose, observed pose-step ticks and pass activity, the active-section cap and rebuild budget, active crosswind and along-wind animation envelopes, SWAY model-hook activity, contact combinations, and exact section invalidations. AtmosSway never logs once per block.
+Set `debugLogging = true` to emit one aggregate diagnostic line every 100 client ticks. The summary reports the raw Project Atmosphere sample, completed window average, committed render wind, accepted and suppressed updates, animation pose, observed pose-step ticks and pass activity, the active-section cap and rebuild budget, precipitation renderer/speed/heading/tilt/native offset, active crosswind and along-wind animation envelopes, executed and suppressed SWAY scans, section-build snapshots, SWAY model-hook activity, contact combinations, and exact section invalidations. AtmosSway never logs once per block or precipitation streak.
 
 An unexpected render-view type or repeated inability to resolve the client level is always logged once as a warning because it indicates that ambient wind cannot reach those models.
 

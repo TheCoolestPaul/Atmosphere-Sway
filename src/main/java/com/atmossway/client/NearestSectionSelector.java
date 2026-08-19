@@ -58,6 +58,15 @@ final class NearestSectionSelector {
         return sections[index];
     }
 
+    boolean contains(long packedSection) {
+        for (int index = 0; index < size; index++) {
+            if (sections[index] == packedSection) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     int distanceSquaredAt(int index) {
         if (index < 0 || index >= size) {
             throw new IndexOutOfBoundsException(index);

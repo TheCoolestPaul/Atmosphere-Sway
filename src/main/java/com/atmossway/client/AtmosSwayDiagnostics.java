@@ -29,6 +29,11 @@ final class AtmosSwayDiagnostics {
     private static final LongAdder SUPPRESSED_WINDOWS = new LongAdder();
     private static final LongAdder ANIMATION_PASSES = new LongAdder();
     private static final LongAdder ANIMATION_INVALIDATIONS = new LongAdder();
+    private static final LongAdder ANIMATION_TARGET_UPDATES = new LongAdder();
+    private static final LongAdder SECTION_BUILD_SNAPSHOTS = new LongAdder();
+    private static final LongAdder ANIMATED_BUILD_SNAPSHOTS = new LongAdder();
+    private static final LongAdder SWAY_SCANS_EXECUTED = new LongAdder();
+    private static final LongAdder SWAY_SCANS_SUPPRESSED = new LongAdder();
     private static final AtomicLong TOTAL_UNRESOLVED = new AtomicLong();
     private static final Set<String> WARNED_KEYS = ConcurrentHashMap.newKeySet();
 
@@ -41,6 +46,12 @@ final class AtmosSwayDiagnostics {
     private static volatile long previousAnimationPoseTick = Long.MIN_VALUE;
     private static volatile long latestAnimationPoseStepTicks;
     private static volatile int activeAnimationSections;
+    private static volatile boolean precipitationActive;
+    private static volatile float precipitationSpeedMps;
+    private static volatile float precipitationHeadingDegrees;
+    private static volatile float precipitationTiltDegrees;
+    private static volatile String precipitationRenderer = "inactive";
+    private static volatile float precipitationNativeOffset;
     private static long lastSummaryTick = Long.MIN_VALUE;
 
     private AtmosSwayDiagnostics() {
@@ -153,6 +164,25 @@ final class AtmosSwayDiagnostics {
         ANIMATION_INVALIDATIONS.add(count);
     }
 
+    static void animationTargetUpdated() {
+        ANIMATION_TARGET_UPDATES.increment();
+    }
+
+    static void sectionBuildSnapshotCaptured(boolean animated) {
+        SECTION_BUILD_SNAPSHOTS.increment();
+        if (animated) {
+            ANIMATED_BUILD_SNAPSHOTS.increment();
+        }
+    }
+
+    static void swayScan(boolean executed) {
+        if (executed) {
+            SWAY_SCANS_EXECUTED.increment();
+        } else {
+            SWAY_SCANS_SUPPRESSED.increment();
+        }
+    }
+
     static void animationState(long poseTick, int activeSections) {
         if (activeSections == 0) {
             previousAnimationPoseTick = Long.MIN_VALUE;
@@ -160,6 +190,19 @@ final class AtmosSwayDiagnostics {
         }
         latestAnimationPoseTick = poseTick;
         activeAnimationSections = activeSections;
+    }
+
+    static void precipitationState(boolean active, float speedMps,
+                                   float headingDegrees, float tiltDegrees) {
+        precipitationActive = active;
+        precipitationSpeedMps = speedMps;
+        precipitationHeadingDegrees = headingDegrees;
+        precipitationTiltDegrees = tiltDegrees;
+    }
+
+    static void precipitationRenderer(String renderer, float nativeOffset) {
+        precipitationRenderer = renderer;
+        precipitationNativeOffset = nativeOffset;
     }
 
     static void levelLoaded(ClientLevel level) {
@@ -198,6 +241,12 @@ final class AtmosSwayDiagnostics {
                             + "animationInvalidations={} animationCrossEnvelope={} "
                             + "animationAlongEnvelope={} animationSectionCap={} "
                             + "animationBudgetPerTick={} "
+                            + "precipitationActive={} precipitationSpeedMps={} "
+                            + "precipitationHeadingDeg={} precipitationTiltDeg={} "
+                            + "precipitationRenderer={} precipitationNativeOffset={} "
+                            + "swayScansExecuted={} swayScansSuppressed={} "
+                            + "sectionBuildSnapshots={} animatedBuildSnapshots={} "
+                            + "animationTargetUpdates={} "
                             + "hooks={} directLevels={} renderRegions={} "
                             + "unresolved={} qualifying={} applied={} spatiallyVaried={} "
                             + "contactCombined={} newSections={} "
@@ -213,6 +262,12 @@ final class AtmosSwayDiagnostics {
                     WindSpatialVariation.alongWindEnvelope(committed.intensity()),
                     NearestSectionSelector.MAX_SECTIONS,
                     WindAnimationScheduler.SECTIONS_PER_TICK,
+                    precipitationActive, precipitationSpeedMps,
+                    precipitationHeadingDegrees, precipitationTiltDegrees,
+                    precipitationRenderer, precipitationNativeOffset,
+                    SWAY_SCANS_EXECUTED.sumThenReset(), SWAY_SCANS_SUPPRESSED.sumThenReset(),
+                    SECTION_BUILD_SNAPSHOTS.sumThenReset(), ANIMATED_BUILD_SNAPSHOTS.sumThenReset(),
+                    ANIMATION_TARGET_UPDATES.sumThenReset(),
                     MODEL_HOOKS.sumThenReset(), DIRECT_LEVELS.sumThenReset(),
                     RENDER_REGIONS.sumThenReset(), UNRESOLVED_LEVELS.sumThenReset(),
                     QUALIFYING_BLOCKS.sumThenReset(), WIND_APPLICATIONS.sumThenReset(),
@@ -250,6 +305,11 @@ final class AtmosSwayDiagnostics {
         SUPPRESSED_WINDOWS.reset();
         ANIMATION_PASSES.reset();
         ANIMATION_INVALIDATIONS.reset();
+        ANIMATION_TARGET_UPDATES.reset();
+        SECTION_BUILD_SNAPSHOTS.reset();
+        ANIMATED_BUILD_SNAPSHOTS.reset();
+        SWAY_SCANS_EXECUTED.reset();
+        SWAY_SCANS_SUPPRESSED.reset();
         TOTAL_UNRESOLVED.set(0L);
         WARNED_KEYS.clear();
         latestSample = SampleSnapshot.NONE;
@@ -261,6 +321,12 @@ final class AtmosSwayDiagnostics {
         previousAnimationPoseTick = Long.MIN_VALUE;
         latestAnimationPoseStepTicks = 0L;
         activeAnimationSections = 0;
+        precipitationActive = false;
+        precipitationSpeedMps = 0.0F;
+        precipitationHeadingDegrees = 0.0F;
+        precipitationTiltDegrees = 0.0F;
+        precipitationRenderer = "inactive";
+        precipitationNativeOffset = 0.0F;
         lastSummaryTick = Long.MIN_VALUE;
     }
 

@@ -14,6 +14,8 @@ final class WindSpatialVariation {
     private static final float UNIT_FLOAT_SCALE = 0x1.0p-24F;
     private static final int WAVE_TABLE_SIZE = 256;
     private static final float[] SINE_TABLE = createSineTable();
+    private static final float[] ROTATION_SINE_TABLE = createRotationTable(true);
+    private static final float[] ROTATION_COSINE_TABLE = createRotationTable(false);
 
     private WindSpatialVariation() {
     }
@@ -21,24 +23,29 @@ final class WindSpatialVariation {
     static WindForceMath.WindForce apply(WindForceMath.WindForce wind,
                                          long anchorKey, float maximumIntensity,
                                          long animationPoseTick) {
+        return apply(wind, anchorKey, maximumIntensity, animationPoseTick, true);
+    }
+
+    static WindForceMath.WindForce apply(WindForceMath.WindForce wind,
+                                         long anchorKey, float maximumIntensity,
+                                         long animationPoseTick, boolean animate) {
         if (!wind.isPresent() || !Float.isFinite(maximumIntensity)
                 || maximumIntensity <= 0.0F) {
             return WindForceMath.WindForce.NONE;
         }
 
         long positionHash = mix(anchorKey);
-        int animationIndex = animationIndex(positionHash, animationPoseTick);
-        float crosswindWave = SINE_TABLE[animationIndex];
-        float alongWindWave = SINE_TABLE[
+        int animationIndex = animate ? animationIndex(positionHash, animationPoseTick) : 0;
+        float crosswindWave = animate ? SINE_TABLE[animationIndex] : 0.0F;
+        float alongWindWave = animate ? SINE_TABLE[
                 (animationIndex + WAVE_TABLE_SIZE / 4) & (WAVE_TABLE_SIZE - 1)
-        ];
-        float angleDegrees = signedUnit(mix(positionHash ^ ANGLE_SALT)) * MAX_ANGLE_DEGREES;
+        ] : 0.0F;
+        int rotationIndex = (int) (mix(positionHash ^ ANGLE_SALT) & (WAVE_TABLE_SIZE - 1));
         float intensityMultiplier = 1.0F
                 + signedUnit(mix(positionHash ^ INTENSITY_SALT)) * MAX_INTENSITY_VARIATION;
 
-        float radians = (float) Math.toRadians(angleDegrees);
-        float cosine = (float) Math.cos(radians);
-        float sine = (float) Math.sin(radians);
+        float cosine = ROTATION_COSINE_TABLE[rotationIndex];
+        float sine = ROTATION_SINE_TABLE[rotationIndex];
         float directionX = wind.x() * cosine - wind.z() * sine;
         float directionZ = wind.x() * sine + wind.z() * cosine;
         float variedIntensity = wind.intensity() * intensityMultiplier;
@@ -87,6 +94,17 @@ final class WindSpatialVariation {
         float[] table = new float[WAVE_TABLE_SIZE];
         for (int index = 0; index < table.length; index++) {
             table[index] = (float) Math.sin(index * Math.PI * 2.0D / table.length);
+        }
+        return table;
+    }
+
+    private static float[] createRotationTable(boolean sine) {
+        float[] table = new float[WAVE_TABLE_SIZE];
+        for (int index = 0; index < table.length; index++) {
+            float unit = index / (float) (table.length - 1);
+            float degrees = (unit * 2.0F - 1.0F) * MAX_ANGLE_DEGREES;
+            double radians = Math.toRadians(degrees);
+            table[index] = (float) (sine ? Math.sin(radians) : Math.cos(radians));
         }
         return table;
     }

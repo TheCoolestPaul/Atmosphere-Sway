@@ -116,6 +116,17 @@ class WindSpatialVariationTest {
     }
 
     @Test
+    void staticVariationDoesNotChangeWithAnimationTime() {
+        var wind = new WindForceMath.WindForce(1.0F, 0.0F, 0.5F);
+        long anchor = 0x7135A9L;
+
+        var first = WindSpatialVariation.apply(wind, anchor, 1.5F, 0L, false);
+        var later = WindSpatialVariation.apply(wind, anchor, 1.5F, 47L, false);
+
+        assertForce(first, later);
+    }
+
+    @Test
     void additiveWaveIsVisibleAtTheReportedLightWindStrength() {
         var wind = new WindForceMath.WindForce(1.0F, 0.0F, 0.1705F);
         long anchor = 0x7135A9L;

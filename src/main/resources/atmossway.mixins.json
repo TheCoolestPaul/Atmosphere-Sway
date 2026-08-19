@@ -4,8 +4,12 @@
   "package": "com.atmossway.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
+    "ProjectAtmospherePrecipitationMixin",
     "RenderChunkRegionAccessor",
+    "SectionCompilerMixin",
+    "SimpleCloudsPrecipitationQuadMixin",
     "SwayBehaviorDeformerMixin",
+    "SwayEngineMixin",
     "SwayModelMixin"
   ],
   "injectors": {

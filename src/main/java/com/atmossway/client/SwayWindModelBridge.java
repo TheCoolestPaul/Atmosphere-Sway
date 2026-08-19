@@ -29,6 +29,9 @@ public final class SwayWindModelBridge {
         if (state == null || original == null) {
             return original;
         }
+        if (!SwayConfig.INSTANCE.enabled) {
+            return original;
+        }
 
         ClientLevel level = resolveClientLevel(blockView);
         if (level == null) {
@@ -45,7 +48,8 @@ public final class SwayWindModelBridge {
         AtmosSwayDiagnostics.qualifyingBlock();
 
         AmbientWindController.track(level, pos);
-        WindForceMath.WindForce wind = AmbientWindController.currentWind();
+        AmbientRenderState.Snapshot renderSnapshot = AmbientRenderState.forBlock(pos);
+        WindForceMath.WindForce wind = renderSnapshot.wind();
         if (!wind.isPresent()) {
             return original;
         }
@@ -54,7 +58,8 @@ public final class SwayWindModelBridge {
                 wind,
                 variationAnchor.asLong(),
                 AtmosSwayConfig.MAX_WIND_INTENSITY.get().floatValue(),
-                AmbientWindController.animationPoseTick()
+                renderSnapshot.animationPoseTick(),
+                renderSnapshot.animated()
         );
         if (!variedWind.isPresent()) {
             return original;
@@ -75,7 +80,7 @@ public final class SwayWindModelBridge {
         float cap = Math.max(0.0F, SwayConfig.INSTANCE.intensity * 2.0F);
         WindForceMath.WindForce combined = WindForceMath.vectorSumCapped(contact, variedWind, cap);
         AtmosSwayDiagnostics.windApplied(contact.isPresent());
-        SwayData result = new SwayData(combined.x(), combined.z(), combined.intensity());
+        SwayData result = new AtmosSwayData(combined.x(), combined.z(), combined.intensity());
 
         return original.derive()
                 .with(SwayModel.SWAY_DATA, result)

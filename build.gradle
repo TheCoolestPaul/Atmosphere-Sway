@@ -51,6 +51,7 @@ neoForge {
 dependencies {
     implementation "maven.modrinth:sway:${sway_version}"
     implementation "maven.modrinth:project-atmosphere:${project_atmosphere_version}"
+    compileOnly "maven.modrinth:simple-clouds:${simple_clouds_version}"
 
     // Modrinth Maven does not publish transitive metadata. These make the
     // development client match Project Atmosphere's documented runtime stack.

@@ -52,6 +52,34 @@ class AmbientRenderStateTest {
     }
 
     @Test
+    void rendererFallbackUsesTheSectionAnimationTarget() {
+        long section = 92L;
+        var base = new WindForceMath.WindForce(0.0F, 1.0F, 0.2F);
+        var animated = new WindForceMath.WindForce(1.0F, 0.0F, 0.6F);
+        AmbientRenderState.publishWind(base);
+        AmbientRenderState.targetAnimation(section, animated, 81L);
+
+        var snapshot = AmbientRenderState.forPackedSection(section);
+
+        assertEquals(animated, snapshot.wind());
+        assertEquals(81L, snapshot.animationPoseTick());
+        assertTrue(snapshot.animated());
+    }
+
+    @Test
+    void rendererFallbackUsesTheSectionGustTarget() {
+        long section = 93L;
+        var gust = new WindForceMath.WindForce(-1.0F, 0.0F, 0.35F);
+        AmbientRenderState.publishWind(new WindForceMath.WindForce(0.0F, 1.0F, 0.2F));
+        AmbientRenderState.targetGust(section, gust);
+
+        var snapshot = AmbientRenderState.forPackedSection(section);
+
+        assertEquals(gust, snapshot.wind());
+        assertFalse(snapshot.animated());
+    }
+
+    @Test
     void threadLocalBuildContextHoldsItsCapturedSnapshot() {
         long section = 123L;
         var firstWind = new WindForceMath.WindForce(1.0F, 0.0F, 0.25F);

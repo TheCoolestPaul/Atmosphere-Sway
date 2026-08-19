@@ -63,7 +63,7 @@ public final class AmbientRenderState {
         if (context != null && context.packedSection() == packedSection) {
             return context.snapshot();
         }
-        return baseSnapshot;
+        return captureForSection(packedSection);
     }
 
     static Snapshot captureForSection(long packedSection) {

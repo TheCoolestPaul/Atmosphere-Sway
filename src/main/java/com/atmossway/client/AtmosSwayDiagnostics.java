@@ -17,6 +17,7 @@ final class AtmosSwayDiagnostics {
     private static final LongAdder MODEL_HOOKS = new LongAdder();
     private static final LongAdder DIRECT_LEVELS = new LongAdder();
     private static final LongAdder RENDER_REGIONS = new LongAdder();
+    private static final LongAdder FALLBACK_LEVELS = new LongAdder();
     private static final LongAdder UNRESOLVED_LEVELS = new LongAdder();
     private static final LongAdder QUALIFYING_BLOCKS = new LongAdder();
     private static final LongAdder WIND_APPLICATIONS = new LongAdder();
@@ -82,6 +83,10 @@ final class AtmosSwayDiagnostics {
         RENDER_REGIONS.increment();
     }
 
+    static void fallbackLevelResolved() {
+        FALLBACK_LEVELS.increment();
+    }
+
     static void unresolvedLevel(String viewType) {
         UNRESOLVED_LEVELS.increment();
         long failures = TOTAL_UNRESOLVED.incrementAndGet();
@@ -98,6 +103,22 @@ final class AtmosSwayDiagnostics {
         warnOnce("missing-render-position",
                 "SWAY supplied no deformation position and had no captured render position; "
                         + "specialized multiblock deformation may be skipped");
+    }
+
+    static void modelWrappingComplete(int registeredBlocks, long wrappedModels) {
+        if (debugEnabled()) {
+            AtmosSway.LOGGER.info(
+                    "SWAY model baking registeredBlocks={} wrappedModels={}",
+                    registeredBlocks, wrappedModels
+            );
+        }
+        if (registeredBlocks > 0 && wrappedModels == 0L) {
+            warnOnce(
+                    "no-wrapped-models",
+                    "SWAY registered {} blocks but wrapped no baked models; foliage cannot deform",
+                    registeredBlocks
+            );
+        }
     }
 
     static void qualifyingBlock() {
@@ -305,7 +326,7 @@ final class AtmosSwayDiagnostics {
                             + "swayScansExecuted={} swayScansSuppressed={} "
                             + "sectionBuildSnapshots={} animatedBuildSnapshots={} "
                             + "animationTargetUpdates={} "
-                            + "hooks={} directLevels={} renderRegions={} "
+                            + "hooks={} directLevels={} renderRegions={} fallbackLevels={} "
                             + "unresolved={} qualifying={} applied={} spatiallyVaried={} "
                             + "contactCombined={} newSections={} "
                             + "trackedSections={} exactInvalidations={} evictedSections={} lastRefresh={}",
@@ -337,7 +358,8 @@ final class AtmosSwayDiagnostics {
                     SECTION_BUILD_SNAPSHOTS.sumThenReset(), ANIMATED_BUILD_SNAPSHOTS.sumThenReset(),
                     ANIMATION_TARGET_UPDATES.sumThenReset(),
                     MODEL_HOOKS.sumThenReset(), DIRECT_LEVELS.sumThenReset(),
-                    RENDER_REGIONS.sumThenReset(), UNRESOLVED_LEVELS.sumThenReset(),
+                    RENDER_REGIONS.sumThenReset(), FALLBACK_LEVELS.sumThenReset(),
+                    UNRESOLVED_LEVELS.sumThenReset(),
                     QUALIFYING_BLOCKS.sumThenReset(), WIND_APPLICATIONS.sumThenReset(),
                     SPATIAL_VARIATIONS.sumThenReset(), CONTACT_COMBINATIONS.sumThenReset(),
                     NEW_SECTIONS.sumThenReset(),
@@ -361,6 +383,7 @@ final class AtmosSwayDiagnostics {
         MODEL_HOOKS.reset();
         DIRECT_LEVELS.reset();
         RENDER_REGIONS.reset();
+        FALLBACK_LEVELS.reset();
         UNRESOLVED_LEVELS.reset();
         QUALIFYING_BLOCKS.reset();
         WIND_APPLICATIONS.reset();

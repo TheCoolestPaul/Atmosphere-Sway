@@ -1,7 +1,7 @@
 package com.atmossway.client;
 
 final class NearestSectionSelector {
-    static final int MAX_SECTIONS = 6;
+    static final int MAX_SECTIONS = 3;
 
     private final long[] sections = new long[MAX_SECTIONS];
     private final int[] distances = new int[MAX_SECTIONS];

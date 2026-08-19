@@ -17,6 +17,7 @@ final class AtmosSwayDiagnostics {
     private static final LongAdder MODEL_HOOKS = new LongAdder();
     private static final LongAdder DIRECT_LEVELS = new LongAdder();
     private static final LongAdder RENDER_REGIONS = new LongAdder();
+    private static final LongAdder FALLBACK_LEVELS = new LongAdder();
     private static final LongAdder UNRESOLVED_LEVELS = new LongAdder();
     private static final LongAdder QUALIFYING_BLOCKS = new LongAdder();
     private static final LongAdder WIND_APPLICATIONS = new LongAdder();
@@ -28,11 +29,10 @@ final class AtmosSwayDiagnostics {
     private static final LongAdder WIND_COMMITS = new LongAdder();
     private static final LongAdder SUPPRESSED_WINDOWS = new LongAdder();
     private static final LongAdder ANIMATION_PASSES = new LongAdder();
+    private static final LongAdder ANIMATION_CADENCE_SKIPS = new LongAdder();
+    private static final LongAdder ANIMATION_URGENT_PASSES = new LongAdder();
     private static final LongAdder ANIMATION_INVALIDATIONS = new LongAdder();
     private static final LongAdder ANIMATION_TARGET_UPDATES = new LongAdder();
-    private static final LongAdder GUST_PROPAGATIONS = new LongAdder();
-    private static final LongAdder GUST_INVALIDATIONS = new LongAdder();
-    private static final LongAdder GUST_RESTORATIONS = new LongAdder();
     private static final LongAdder SECTION_BUILD_SNAPSHOTS = new LongAdder();
     private static final LongAdder ANIMATED_BUILD_SNAPSHOTS = new LongAdder();
     private static final LongAdder SWAY_SCANS_EXECUTED = new LongAdder();
@@ -56,9 +56,7 @@ final class AtmosSwayDiagnostics {
     private static volatile long previousAnimationPoseTick = Long.MIN_VALUE;
     private static volatile long latestAnimationPoseStepTicks;
     private static volatile int activeAnimationSections;
-    private static volatile boolean gustPropagationActive;
-    private static volatile boolean gustPropagationPending;
-    private static volatile int gustPropagationRemaining;
+    private static volatile String lastAnimationPassReason = "none";
     private static volatile boolean precipitationActive;
     private static volatile float precipitationSpeedMps;
     private static volatile float precipitationHeadingDegrees;
@@ -82,6 +80,10 @@ final class AtmosSwayDiagnostics {
         RENDER_REGIONS.increment();
     }
 
+    static void fallbackLevelResolved() {
+        FALLBACK_LEVELS.increment();
+    }
+
     static void unresolvedLevel(String viewType) {
         UNRESOLVED_LEVELS.increment();
         long failures = TOTAL_UNRESOLVED.incrementAndGet();
@@ -98,6 +100,22 @@ final class AtmosSwayDiagnostics {
         warnOnce("missing-render-position",
                 "SWAY supplied no deformation position and had no captured render position; "
                         + "specialized multiblock deformation may be skipped");
+    }
+
+    static void modelWrappingComplete(int registeredBlocks, long wrappedModels) {
+        if (debugEnabled()) {
+            AtmosSway.LOGGER.info(
+                    "SWAY model baking registeredBlocks={} wrappedModels={}",
+                    registeredBlocks, wrappedModels
+            );
+        }
+        if (registeredBlocks > 0 && wrappedModels == 0L) {
+            warnOnce(
+                    "no-wrapped-models",
+                    "SWAY registered {} blocks but wrapped no baked models; foliage cannot deform",
+                    registeredBlocks
+            );
+        }
     }
 
     static void qualifyingBlock() {
@@ -134,10 +152,13 @@ final class AtmosSwayDiagnostics {
     }
 
     static void windSample(RegionInstanceKey region, long tick, float speedMps,
-                           float directionDeg, WindForceMath.WindForce force, boolean valid) {
+                           float directionDeg, WindForceMath.WindForce force, boolean valid,
+                           String source, long syncAgeTicks, String syncMatch,
+                           long packetsReceived, long packetsRejected) {
         latestSample = new SampleSnapshot(
                 String.valueOf(region), tick, speedMps, directionDeg,
-                force.forceX(), force.forceZ(), force.intensity(), valid
+                force.forceX(), force.forceZ(), force.intensity(), valid,
+                source, syncAgeTicks, syncMatch, packetsReceived, packetsRejected
         );
     }
 
@@ -159,7 +180,8 @@ final class AtmosSwayDiagnostics {
         WIND_COMMITS.increment();
     }
 
-    static void animationPassStarted(long poseTick, int activeSections) {
+    static void animationPassStarted(long poseTick, int activeSections,
+                                     WindAnimationScheduler.PassReason reason) {
         long previousPoseTick = previousAnimationPoseTick;
         latestAnimationPoseStepTicks = previousPoseTick == Long.MIN_VALUE || poseTick < previousPoseTick
                 ? 0L
@@ -167,6 +189,10 @@ final class AtmosSwayDiagnostics {
         previousAnimationPoseTick = poseTick;
         latestAnimationPoseTick = poseTick;
         activeAnimationSections = activeSections;
+        lastAnimationPassReason = reason.diagnosticName();
+        if (reason.urgent()) {
+            ANIMATION_URGENT_PASSES.increment();
+        }
     }
 
     static void animationPassCompleted() {
@@ -175,6 +201,10 @@ final class AtmosSwayDiagnostics {
 
     static void animationSectionsInvalidated(int count) {
         ANIMATION_INVALIDATIONS.add(count);
+    }
+
+    static void animationCadenceSkipped() {
+        ANIMATION_CADENCE_SKIPS.increment();
     }
 
     static void animationTargetUpdated() {
@@ -194,23 +224,6 @@ final class AtmosSwayDiagnostics {
         transitionCorrection = ForceSnapshot.from(correction);
         transitionProgress = progress;
         transitionRemainingTicks = remainingTicks;
-    }
-
-    static void gustPropagationStarted(int sectionCount) {
-        if (sectionCount > 0) {
-            GUST_PROPAGATIONS.increment();
-        }
-    }
-
-    static void gustSectionsInvalidated(int invalidated, int restored) {
-        GUST_INVALIDATIONS.add(invalidated);
-        GUST_RESTORATIONS.add(restored);
-    }
-
-    static void gustPropagationState(boolean active, boolean pending, int remaining) {
-        gustPropagationActive = active;
-        gustPropagationPending = pending;
-        gustPropagationRemaining = remaining;
     }
 
     static void sectionBuildSnapshotCaptured(boolean animated) {
@@ -283,7 +296,9 @@ final class AtmosSwayDiagnostics {
             ForceSnapshot correction = transitionCorrection;
             AtmosSway.LOGGER.info(
                     "Wind diagnostics enabled={} sampleTick={} region={} speedMps={} directionDeg={} "
-                            + "rawValid={} rawForce=({},{}) rawIntensity={} averageForce=({},{}) "
+                            + "rawValid={} windSource={} syncAgeTicks={} syncMatch={} "
+                            + "syncPacketsReceived={} syncPacketsRejected={} "
+                            + "rawForce=({},{}) rawIntensity={} averageForce=({},{}) "
                             + "averageIntensity={} committedForce=({},{}) committedIntensity={} "
                             + "fastForce=({},{}) fastIntensity={} gustAdjustment=({},{}) "
                             + "gustAdjustmentIntensity={} nearbyForce=({},{}) nearbyIntensity={} "
@@ -292,25 +307,25 @@ final class AtmosSwayDiagnostics {
                             + "transitionProgress={} transitionRemainingTicks={} "
                             + "windCommits={} suppressedWindows={} lastCommit={} "
                             + "animationPoseTick={} animationPoseStepTicks={} animationSections={} "
-                            + "animationPasses={} "
+                            + "animationPasses={} animationCadenceSkips={} "
+                            + "animationUrgentPasses={} animationPassReason={} "
                             + "animationInvalidations={} animationCrossEnvelope={} "
                             + "animationAlongEnvelope={} animationSectionCap={} "
                             + "animationBudgetPerTick={} "
-                            + "gustPropagations={} gustInvalidations={} gustRestorations={} "
-                            + "gustQueueActive={} gustQueuePending={} gustQueueRemaining={} "
-                            + "gustBudgetPerTick={} "
                             + "precipitationActive={} precipitationSpeedMps={} "
                             + "precipitationHeadingDeg={} precipitationTiltDeg={} "
                             + "precipitationRenderer={} precipitationNativeOffset={} "
                             + "swayScansExecuted={} swayScansSuppressed={} "
                             + "sectionBuildSnapshots={} animatedBuildSnapshots={} "
                             + "animationTargetUpdates={} "
-                            + "hooks={} directLevels={} renderRegions={} "
+                            + "hooks={} directLevels={} renderRegions={} fallbackLevels={} "
                             + "unresolved={} qualifying={} applied={} spatiallyVaried={} "
                             + "contactCombined={} newSections={} "
                             + "trackedSections={} exactInvalidations={} evictedSections={} lastRefresh={}",
                     enabled, sample.tick(), sample.region(), sample.speedMps(), sample.directionDeg(),
-                    sample.valid(), sample.forceX(), sample.forceZ(), sample.intensity(),
+                    sample.valid(), sample.source(), sample.syncAgeTicks(), sample.syncMatch(),
+                    sample.packetsReceived(), sample.packetsRejected(),
+                    sample.forceX(), sample.forceZ(), sample.intensity(),
                     average.forceX(), average.forceZ(), average.intensity(),
                     committed.forceX(), committed.forceZ(), committed.intensity(),
                     fast.forceX(), fast.forceZ(), fast.intensity(),
@@ -321,15 +336,13 @@ final class AtmosSwayDiagnostics {
                     transitionProgress, transitionRemainingTicks,
                     WIND_COMMITS.sumThenReset(), SUPPRESSED_WINDOWS.sumThenReset(), lastCommitReason,
                     latestAnimationPoseTick, latestAnimationPoseStepTicks, activeAnimationSections,
-                    ANIMATION_PASSES.sumThenReset(), ANIMATION_INVALIDATIONS.sumThenReset(),
+                    ANIMATION_PASSES.sumThenReset(), ANIMATION_CADENCE_SKIPS.sumThenReset(),
+                    ANIMATION_URGENT_PASSES.sumThenReset(), lastAnimationPassReason,
+                    ANIMATION_INVALIDATIONS.sumThenReset(),
                     WindSpatialVariation.crosswindEnvelope(animated.intensity()),
                     WindSpatialVariation.alongWindEnvelope(animated.intensity()),
                     NearestSectionSelector.MAX_SECTIONS,
                     WindAnimationScheduler.SECTIONS_PER_TICK,
-                    GUST_PROPAGATIONS.sumThenReset(), GUST_INVALIDATIONS.sumThenReset(),
-                    GUST_RESTORATIONS.sumThenReset(), gustPropagationActive,
-                    gustPropagationPending, gustPropagationRemaining,
-                    GustPropagationScheduler.SECTIONS_PER_TICK,
                     precipitationActive, precipitationSpeedMps,
                     precipitationHeadingDegrees, precipitationTiltDegrees,
                     precipitationRenderer, precipitationNativeOffset,
@@ -337,7 +350,8 @@ final class AtmosSwayDiagnostics {
                     SECTION_BUILD_SNAPSHOTS.sumThenReset(), ANIMATED_BUILD_SNAPSHOTS.sumThenReset(),
                     ANIMATION_TARGET_UPDATES.sumThenReset(),
                     MODEL_HOOKS.sumThenReset(), DIRECT_LEVELS.sumThenReset(),
-                    RENDER_REGIONS.sumThenReset(), UNRESOLVED_LEVELS.sumThenReset(),
+                    RENDER_REGIONS.sumThenReset(), FALLBACK_LEVELS.sumThenReset(),
+                    UNRESOLVED_LEVELS.sumThenReset(),
                     QUALIFYING_BLOCKS.sumThenReset(), WIND_APPLICATIONS.sumThenReset(),
                     SPATIAL_VARIATIONS.sumThenReset(), CONTACT_COMBINATIONS.sumThenReset(),
                     NEW_SECTIONS.sumThenReset(),
@@ -361,6 +375,7 @@ final class AtmosSwayDiagnostics {
         MODEL_HOOKS.reset();
         DIRECT_LEVELS.reset();
         RENDER_REGIONS.reset();
+        FALLBACK_LEVELS.reset();
         UNRESOLVED_LEVELS.reset();
         QUALIFYING_BLOCKS.reset();
         WIND_APPLICATIONS.reset();
@@ -372,11 +387,10 @@ final class AtmosSwayDiagnostics {
         WIND_COMMITS.reset();
         SUPPRESSED_WINDOWS.reset();
         ANIMATION_PASSES.reset();
+        ANIMATION_CADENCE_SKIPS.reset();
+        ANIMATION_URGENT_PASSES.reset();
         ANIMATION_INVALIDATIONS.reset();
         ANIMATION_TARGET_UPDATES.reset();
-        GUST_PROPAGATIONS.reset();
-        GUST_INVALIDATIONS.reset();
-        GUST_RESTORATIONS.reset();
         SECTION_BUILD_SNAPSHOTS.reset();
         ANIMATED_BUILD_SNAPSHOTS.reset();
         SWAY_SCANS_EXECUTED.reset();
@@ -399,9 +413,7 @@ final class AtmosSwayDiagnostics {
         previousAnimationPoseTick = Long.MIN_VALUE;
         latestAnimationPoseStepTicks = 0L;
         activeAnimationSections = 0;
-        gustPropagationActive = false;
-        gustPropagationPending = false;
-        gustPropagationRemaining = 0;
+        lastAnimationPassReason = "none";
         precipitationActive = false;
         precipitationSpeedMps = 0.0F;
         precipitationHeadingDegrees = 0.0F;
@@ -412,9 +424,12 @@ final class AtmosSwayDiagnostics {
     }
 
     private record SampleSnapshot(String region, long tick, float speedMps, float directionDeg,
-                                  float forceX, float forceZ, float intensity, boolean valid) {
+                                  float forceX, float forceZ, float intensity, boolean valid,
+                                  String source, long syncAgeTicks, String syncMatch,
+                                  long packetsReceived, long packetsRejected) {
         private static final SampleSnapshot NONE = new SampleSnapshot(
-                "none", Long.MIN_VALUE, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, false
+                "none", Long.MIN_VALUE, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, false,
+                "unavailable", Long.MAX_VALUE, "missing", 0L, 0L
         );
     }
 

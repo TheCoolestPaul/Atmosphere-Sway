@@ -1,0 +1,91 @@
+name: Bug report
+description: Report a reproducible problem with AtmosSway
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve AtmosSway. Before reproducing the problem, open `config/atmossway-client.toml` and set `debugLogging = true` under `[wind]`. Restart Minecraft if needed, reproduce the bug, and attach `logs/latest.log` below.
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Before submitting
+      options:
+        - label: I am using a supported Minecraft, NeoForge, SWAY, Project Atmosphere, and Simple Clouds version.
+          required: true
+        - label: I set `[wind].debugLogging = true` in `config/atmossway-client.toml` before reproducing the problem.
+          required: true
+        - label: I searched the existing issues and did not find a matching report.
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected to happen instead.
+      placeholder: Tell us what you observed and what you expected.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include the smallest reliable sequence that triggers the problem.
+      placeholder: |
+        1. Start Minecraft with ...
+        2. Load or create ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: input
+    id: minecraft-version
+    attributes:
+      label: Minecraft version
+      placeholder: 1.21.1
+    validations:
+      required: true
+
+  - type: input
+    id: neoforge-version
+    attributes:
+      label: NeoForge version
+      placeholder: 21.1.213
+    validations:
+      required: true
+
+  - type: input
+    id: mod-versions
+    attributes:
+      label: AtmosSway and dependency versions
+      description: List the exact AtmosSway, SWAY, Project Atmosphere, and Simple Clouds versions.
+      placeholder: "AtmosSway 1.1.0; SWAY 2.4.3; Project Atmosphere 0.9.1.2; Simple Clouds 0.7.3"
+    validations:
+      required: true
+
+  - type: textarea
+    id: other-mods
+    attributes:
+      label: Other installed mods
+      description: Attach a mod list or list any other mods that may be relevant. Write "None" if applicable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Debug log
+      description: After reproducing with `[wind].debugLogging = true`, drag and drop `logs/latest.log` here. Also attach a crash report if one was created. Do not paste the entire log into this field.
+      placeholder: Drag and drop latest.log and any crash report here.
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add screenshots, videos, configuration changes, or anything else that may help.

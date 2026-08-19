@@ -1,0 +1,56 @@
+name: Bug report
+description: Report a reproducible problem with AtmosSway
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before reproducing the problem, open `config/atmossway-client.toml` and set `debugLogging = true` under `[wind]`. Restart Minecraft if needed, reproduce the bug, and attach `logs/latest.log` below. The log includes the game, loader, mod, dependency, and installed-mod details needed for diagnosis.
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Before submitting
+      options:
+        - label: I set `[wind].debugLogging = true` in `config/atmossway-client.toml` before reproducing the problem.
+          required: true
+        - label: I searched the existing issues and did not find a matching report.
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe what you observed and what you expected to happen instead.
+      placeholder: Tell us what happened and what you expected.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include the smallest reliable sequence that triggers the problem.
+      placeholder: |
+        1. Start Minecraft with ...
+        2. Load or create ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Debug log
+      description: After reproducing with `[wind].debugLogging = true`, drag and drop `logs/latest.log` here. Also attach a crash report if one was created. Do not paste the entire log into this field.
+      placeholder: Drag and drop latest.log and any crash report here.
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
+      description: Add screenshots, videos, unusual configuration changes, or anything else that may help.

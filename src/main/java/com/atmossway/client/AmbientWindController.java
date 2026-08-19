@@ -6,6 +6,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 
 import java.util.Set;
+import java.util.HashSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -15,9 +16,15 @@ public final class AmbientWindController {
     private static final NearestSectionSelector ANIMATION_SECTIONS = new NearestSectionSelector();
     private static final SustainedWindLatch WIND_LATCH = new SustainedWindLatch();
     private static final WindAnimationScheduler ANIMATION_SCHEDULER = new WindAnimationScheduler();
+    private static final FastGustFilter FAST_GUST_FILTER = new FastGustFilter();
+    private static final GustPropagationScheduler GUST_SCHEDULER = new GustPropagationScheduler();
+    private static final NearbyGustWorkList GUST_WORK = new NearbyGustWorkList();
+    private static final Set<Long> NEAR_FIELD_TARGETS = new HashSet<>();
 
     private static volatile ClientLevel activeLevel;
     private static WindForceMath.WindForce currentWind = WindForceMath.WindForce.NONE;
+    private static WindForceMath.WindForce nearbyWind = WindForceMath.WindForce.NONE;
+    private static WindForceMath.WindForce animationPassWind = WindForceMath.WindForce.NONE;
     private static long animationPoseTick;
     private static boolean renderedEnabled;
     private static boolean renderedSwayEnabled;
@@ -73,7 +80,11 @@ public final class AmbientWindController {
                 WIND_LATCH.reset();
                 AtmosphereWindCache.reset();
                 currentWind = WindForceMath.WindForce.NONE;
+                nearbyWind = WindForceMath.WindForce.NONE;
                 AmbientRenderState.publishWind(currentWind);
+                clearNearFieldTargets();
+                FAST_GUST_FILTER.reset();
+                GUST_SCHEDULER.reset();
                 renderedEnabled = false;
                 AtmosSwayDiagnostics.windCommitted(currentWind, "disabled");
                 refreshVisibleSections(minecraft, level, "disabled");
@@ -92,7 +103,8 @@ public final class AmbientWindController {
         if (swayEnabled != renderedSwayEnabled) {
             renderedSwayEnabled = swayEnabled;
             if (!swayEnabled) {
-                AmbientRenderState.clearAnimationTargets();
+                clearNearFieldTargets();
+                GUST_SCHEDULER.reset();
             }
             refreshVisibleSections(minecraft, level,
                     swayEnabled ? "sway_enabled" : "sway_disabled");
@@ -102,6 +114,7 @@ public final class AmbientWindController {
             renderedEnabled = true;
             if (sample.valid()) {
                 WIND_LATCH.initialize(sample.force(), gameTick);
+                FAST_GUST_FILTER.initialize(sample.force());
                 currentWind = WIND_LATCH.committed();
                 AmbientRenderState.publishWind(currentWind);
                 AtmosSwayDiagnostics.windCommitted(currentWind, "enabled");
@@ -109,17 +122,21 @@ public final class AmbientWindController {
             refreshVisibleSections(minecraft, level, "enabled");
         } else if (sample.regionChanged() && sample.valid()) {
             WIND_LATCH.initialize(sample.force(), gameTick);
+            FAST_GUST_FILTER.initialize(sample.force());
+            resetNearFieldPropagation();
             currentWind = WIND_LATCH.committed();
             AmbientRenderState.publishWind(currentWind);
             AtmosSwayDiagnostics.windCommitted(currentWind, "region_changed");
             refreshVisibleSections(minecraft, level, "region_changed");
         } else if (!WIND_LATCH.initialized() && sample.valid()) {
             WIND_LATCH.initialize(sample.force(), gameTick);
+            FAST_GUST_FILTER.initialize(sample.force());
             currentWind = WIND_LATCH.committed();
             AmbientRenderState.publishWind(currentWind);
             AtmosSwayDiagnostics.windCommitted(currentWind, "first_valid_sample");
             refreshVisibleSections(minecraft, level, "first_valid_sample");
         } else {
+            FAST_GUST_FILTER.update(sample.force(), sample.valid());
             SustainedWindLatch.WindowResult result = WIND_LATCH.accept(
                     gameTick,
                     sample.force(),
@@ -133,19 +150,31 @@ public final class AmbientWindController {
             if (result.committed()) {
                 currentWind = WIND_LATCH.committed();
                 AmbientRenderState.publishWind(currentWind);
+                resetNearFieldPropagation();
                 refreshVisibleSections(minecraft, level, "sustained_wind");
             }
         }
+        FastGustFilter.Snapshot gust = FAST_GUST_FILTER.snapshot(
+                currentWind,
+                com.atmossway.config.AtmosSwayConfig.MAX_WIND_INTENSITY.get().floatValue()
+        );
+        nearbyWind = gust.nearby();
+        GUST_SCHEDULER.observe(nearbyWind);
+        AtmosSwayDiagnostics.gustState(gust.smoothed(), gust.adjustment(), nearbyWind);
         updateAnimation(minecraft, level, gameTick, swayEnabled);
+        updateGustPropagation(minecraft, level, gameTick, swayEnabled);
         AtmosSwayDiagnostics.maybeLog(gameTick, SWAY_SECTIONS.size(), true);
     }
 
     private static void updateAnimation(Minecraft minecraft, ClientLevel level,
                                         long gameTick, boolean enabled) {
-        boolean animate = enabled && currentWind.isPresent();
+        boolean animate = enabled && nearbyWind.isPresent();
         if (!animate) {
             ANIMATION_SCHEDULER.prepare(gameTick, 0, false);
-            AmbientRenderState.clearAnimationTargets();
+            if (ANIMATION_SECTIONS.size() > 0) {
+                ANIMATION_SECTIONS.reset(playerSectionX, playerSectionY, playerSectionZ);
+                GUST_SCHEDULER.membershipChanged();
+            }
             AtmosSwayDiagnostics.animationState(animationPoseTick, 0);
             return;
         }
@@ -162,10 +191,12 @@ public final class AmbientWindController {
             playerSectionZ = currentSectionZ;
             rebuildAnimationSections(level);
             ANIMATION_SCHEDULER.restart();
+            GUST_SCHEDULER.membershipChanged();
             lastAnimationListTick = gameTick;
         } else {
             if (drainNewAnimationSections()) {
                 animationSectionsDirty = true;
+                GUST_SCHEDULER.membershipChanged();
             }
             boolean refreshDue = gameTick < lastAnimationListTick
                     || lastAnimationListTick == Long.MIN_VALUE
@@ -181,6 +212,7 @@ public final class AmbientWindController {
         int batchCount = ANIMATION_SCHEDULER.prepare(gameTick, animationSectionCount, true);
         if (ANIMATION_SCHEDULER.passStartedThisTick()) {
             animationPoseTick = ANIMATION_SCHEDULER.poseTick();
+            animationPassWind = nearbyWind;
             AtmosSwayDiagnostics.animationPassStarted(animationPoseTick, animationSectionCount);
         }
 
@@ -193,7 +225,8 @@ public final class AmbientWindController {
                 animationSectionsDirty = true;
                 continue;
             }
-            AmbientRenderState.targetAnimation(packed, animationPoseTick);
+            AmbientRenderState.targetAnimation(packed, animationPassWind, animationPoseTick);
+            NEAR_FIELD_TARGETS.add(packed);
             minecraft.levelRenderer.setSectionDirty(section.x(), section.y(), section.z());
             invalidated++;
         }
@@ -217,8 +250,83 @@ public final class AmbientWindController {
             }
         }
         drainNewAnimationSections();
-        AmbientRenderState.retainAnimationTargets(ANIMATION_SECTIONS);
+        GUST_SCHEDULER.membershipChanged();
         animationSectionsDirty = false;
+    }
+
+    private static void updateGustPropagation(Minecraft minecraft, ClientLevel level,
+                                              long gameTick, boolean swayEnabled) {
+        if (!swayEnabled) {
+            AtmosSwayDiagnostics.gustPropagationState(false, false, 0);
+            return;
+        }
+
+        if (GUST_SCHEDULER.shouldStart(gameTick)) {
+            buildGustWorkList(level);
+            GUST_SCHEDULER.start(gameTick, GUST_WORK.size());
+            AtmosSwayDiagnostics.gustPropagationStarted(GUST_WORK.size());
+        }
+
+        int batchSize = GUST_SCHEDULER.nextBatchSize();
+        int start = GUST_SCHEDULER.batchStart();
+        int invalidated = 0;
+        int restored = 0;
+        WindForceMath.WindForce target = GUST_SCHEDULER.passTarget();
+        for (int offset = 0; offset < batchSize; offset++) {
+            int index = start + offset;
+            long packed = GUST_WORK.sectionAt(index);
+            SectionPos section = SectionPos.of(packed);
+            boolean eligible = isAnimationSectionEligible(level, section);
+            boolean restore = GUST_WORK.restorationAt(index) || !eligible;
+
+            if (restore) {
+                AmbientRenderState.clearSectionTarget(packed);
+                NEAR_FIELD_TARGETS.remove(packed);
+                restored++;
+            } else if (ANIMATION_SECTIONS.contains(packed)) {
+                continue;
+            } else {
+                AmbientRenderState.targetGust(packed, target);
+                NEAR_FIELD_TARGETS.add(packed);
+            }
+
+            if (level.hasChunk(section.x(), section.z())) {
+                minecraft.levelRenderer.setSectionDirty(section.x(), section.y(), section.z());
+                invalidated++;
+            }
+        }
+        GUST_SCHEDULER.advance(batchSize);
+        AtmosSwayDiagnostics.gustSectionsInvalidated(invalidated, restored);
+        AtmosSwayDiagnostics.gustPropagationState(
+                GUST_SCHEDULER.active(), GUST_SCHEDULER.pending(), GUST_SCHEDULER.remaining()
+        );
+    }
+
+    private static void buildGustWorkList(ClientLevel level) {
+        GUST_WORK.reset();
+        for (long packed : SWAY_SECTIONS) {
+            SectionPos section = SectionPos.of(packed);
+            if (!level.hasChunk(section.x(), section.z())) {
+                SWAY_SECTIONS.remove(packed);
+                continue;
+            }
+            if (isAnimationSectionEligible(level, section) && !ANIMATION_SECTIONS.contains(packed)) {
+                GUST_WORK.add(packed, sectionDistanceSquared(section), false);
+            }
+        }
+        for (long packed : NEAR_FIELD_TARGETS) {
+            SectionPos section = SectionPos.of(packed);
+            if (!isAnimationSectionEligible(level, section)) {
+                GUST_WORK.add(packed, sectionDistanceSquared(section), true);
+            }
+        }
+    }
+
+    private static int sectionDistanceSquared(SectionPos section) {
+        int dx = section.x() - playerSectionX;
+        int dy = section.y() - playerSectionY;
+        int dz = section.z() - playerSectionZ;
+        return dx * dx + dy * dy + dz * dz;
     }
 
     private static boolean drainNewAnimationSections() {
@@ -268,15 +376,32 @@ public final class AmbientWindController {
         playerSectionZ = Integer.MIN_VALUE;
         lastAnimationListTick = Long.MIN_VALUE;
         currentWind = WindForceMath.WindForce.NONE;
+        nearbyWind = WindForceMath.WindForce.NONE;
+        animationPassWind = WindForceMath.WindForce.NONE;
         animationPoseTick = 0L;
         renderedEnabled = false;
         renderedSwayEnabled = false;
         WIND_LATCH.reset();
         ANIMATION_SCHEDULER.reset();
+        FAST_GUST_FILTER.reset();
+        GUST_SCHEDULER.reset();
+        GUST_WORK.reset();
+        NEAR_FIELD_TARGETS.clear();
         AmbientRenderState.reset();
         SwayUpdateThrottle.reset();
         AtmosphereWindCache.reset();
         PrecipitationWindController.reset();
         AtmosSwayDiagnostics.resetState();
+    }
+
+    private static void resetNearFieldPropagation() {
+        clearNearFieldTargets();
+        GUST_SCHEDULER.reset();
+        GUST_SCHEDULER.membershipChanged();
+    }
+
+    private static void clearNearFieldTargets() {
+        AmbientRenderState.clearSectionTargets();
+        NEAR_FIELD_TARGETS.clear();
     }
 }

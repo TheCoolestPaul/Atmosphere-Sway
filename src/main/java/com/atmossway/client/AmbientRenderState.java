@@ -9,7 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Publishes immutable wind state to asynchronous terrain-compilation threads.
  */
 public final class AmbientRenderState {
-    private static final ConcurrentHashMap<Long, Long> ANIMATION_TARGETS = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<Long, Snapshot> SECTION_TARGETS = new ConcurrentHashMap<>();
     private static final ThreadLocal<BuildContext> BUILD_CONTEXT = new ThreadLocal<>();
 
     private static volatile Snapshot baseSnapshot = Snapshot.NONE;
@@ -21,17 +21,21 @@ public final class AmbientRenderState {
         baseSnapshot = new Snapshot(wind, 0L, false);
     }
 
-    static void targetAnimation(long packedSection, long poseTick) {
-        ANIMATION_TARGETS.put(packedSection, poseTick);
+    static void targetAnimation(long packedSection, WindForceMath.WindForce wind, long poseTick) {
+        SECTION_TARGETS.put(packedSection, new Snapshot(wind, poseTick, true));
         AtmosSwayDiagnostics.animationTargetUpdated();
     }
 
-    static void retainAnimationTargets(NearestSectionSelector selected) {
-        ANIMATION_TARGETS.keySet().removeIf(section -> !selected.contains(section));
+    static void targetGust(long packedSection, WindForceMath.WindForce wind) {
+        SECTION_TARGETS.put(packedSection, new Snapshot(wind, 0L, false));
     }
 
-    static void clearAnimationTargets() {
-        ANIMATION_TARGETS.clear();
+    static void clearSectionTarget(long packedSection) {
+        SECTION_TARGETS.remove(packedSection);
+    }
+
+    static void clearSectionTargets() {
+        SECTION_TARGETS.clear();
     }
 
     public static void beginSectionBuild(SectionPos section) {
@@ -40,10 +44,8 @@ public final class AmbientRenderState {
 
     static void beginPackedSectionBuild(long packedSection) {
         Snapshot base = baseSnapshot;
-        Long poseTick = ANIMATION_TARGETS.get(packedSection);
-        Snapshot captured = poseTick == null
-                ? base
-                : new Snapshot(base.wind(), poseTick, true);
+        Snapshot target = SECTION_TARGETS.get(packedSection);
+        Snapshot captured = target == null ? base : target;
         BUILD_CONTEXT.set(new BuildContext(packedSection, captured));
         AtmosSwayDiagnostics.sectionBuildSnapshotCaptured(captured.animated());
     }
@@ -66,13 +68,13 @@ public final class AmbientRenderState {
 
     static Snapshot captureForSection(long packedSection) {
         Snapshot base = baseSnapshot;
-        Long poseTick = ANIMATION_TARGETS.get(packedSection);
-        return poseTick == null ? base : new Snapshot(base.wind(), poseTick, true);
+        Snapshot target = SECTION_TARGETS.get(packedSection);
+        return target == null ? base : target;
     }
 
     static void reset() {
         baseSnapshot = Snapshot.NONE;
-        ANIMATION_TARGETS.clear();
+        SECTION_TARGETS.clear();
         BUILD_CONTEXT.remove();
     }
 

@@ -30,6 +30,9 @@ final class AtmosSwayDiagnostics {
     private static final LongAdder ANIMATION_PASSES = new LongAdder();
     private static final LongAdder ANIMATION_INVALIDATIONS = new LongAdder();
     private static final LongAdder ANIMATION_TARGET_UPDATES = new LongAdder();
+    private static final LongAdder GUST_PROPAGATIONS = new LongAdder();
+    private static final LongAdder GUST_INVALIDATIONS = new LongAdder();
+    private static final LongAdder GUST_RESTORATIONS = new LongAdder();
     private static final LongAdder SECTION_BUILD_SNAPSHOTS = new LongAdder();
     private static final LongAdder ANIMATED_BUILD_SNAPSHOTS = new LongAdder();
     private static final LongAdder SWAY_SCANS_EXECUTED = new LongAdder();
@@ -40,12 +43,18 @@ final class AtmosSwayDiagnostics {
     private static volatile SampleSnapshot latestSample = SampleSnapshot.NONE;
     private static volatile ForceSnapshot latestAverage = ForceSnapshot.NONE;
     private static volatile ForceSnapshot committedWind = ForceSnapshot.NONE;
+    private static volatile ForceSnapshot fastSmoothedWind = ForceSnapshot.NONE;
+    private static volatile ForceSnapshot gustAdjustment = ForceSnapshot.NONE;
+    private static volatile ForceSnapshot nearbyWind = ForceSnapshot.NONE;
     private static volatile String lastCommitReason = "none";
     private static volatile String lastRefreshReason = "none";
     private static volatile long latestAnimationPoseTick;
     private static volatile long previousAnimationPoseTick = Long.MIN_VALUE;
     private static volatile long latestAnimationPoseStepTicks;
     private static volatile int activeAnimationSections;
+    private static volatile boolean gustPropagationActive;
+    private static volatile boolean gustPropagationPending;
+    private static volatile int gustPropagationRemaining;
     private static volatile boolean precipitationActive;
     private static volatile float precipitationSpeedMps;
     private static volatile float precipitationHeadingDegrees;
@@ -168,6 +177,31 @@ final class AtmosSwayDiagnostics {
         ANIMATION_TARGET_UPDATES.increment();
     }
 
+    static void gustState(WindForceMath.WindForce smoothed,
+                          WindForceMath.WindForce adjustment,
+                          WindForceMath.WindForce nearby) {
+        fastSmoothedWind = ForceSnapshot.from(smoothed);
+        gustAdjustment = ForceSnapshot.from(adjustment);
+        nearbyWind = ForceSnapshot.from(nearby);
+    }
+
+    static void gustPropagationStarted(int sectionCount) {
+        if (sectionCount > 0) {
+            GUST_PROPAGATIONS.increment();
+        }
+    }
+
+    static void gustSectionsInvalidated(int invalidated, int restored) {
+        GUST_INVALIDATIONS.add(invalidated);
+        GUST_RESTORATIONS.add(restored);
+    }
+
+    static void gustPropagationState(boolean active, boolean pending, int remaining) {
+        gustPropagationActive = active;
+        gustPropagationPending = pending;
+        gustPropagationRemaining = remaining;
+    }
+
     static void sectionBuildSnapshotCaptured(boolean animated) {
         SECTION_BUILD_SNAPSHOTS.increment();
         if (animated) {
@@ -231,16 +265,24 @@ final class AtmosSwayDiagnostics {
             SampleSnapshot sample = latestSample;
             ForceSnapshot average = latestAverage;
             ForceSnapshot committed = committedWind;
+            ForceSnapshot fast = fastSmoothedWind;
+            ForceSnapshot adjustment = gustAdjustment;
+            ForceSnapshot nearby = nearbyWind;
             AtmosSway.LOGGER.info(
                     "Wind diagnostics enabled={} sampleTick={} region={} speedMps={} directionDeg={} "
                             + "rawValid={} rawForce=({},{}) rawIntensity={} averageForce=({},{}) "
                             + "averageIntensity={} committedForce=({},{}) committedIntensity={} "
+                            + "fastForce=({},{}) fastIntensity={} gustAdjustment=({},{}) "
+                            + "gustAdjustmentIntensity={} nearbyForce=({},{}) nearbyIntensity={} "
                             + "windCommits={} suppressedWindows={} lastCommit={} "
                             + "animationPoseTick={} animationPoseStepTicks={} animationSections={} "
                             + "animationPasses={} "
                             + "animationInvalidations={} animationCrossEnvelope={} "
                             + "animationAlongEnvelope={} animationSectionCap={} "
                             + "animationBudgetPerTick={} "
+                            + "gustPropagations={} gustInvalidations={} gustRestorations={} "
+                            + "gustQueueActive={} gustQueuePending={} gustQueueRemaining={} "
+                            + "gustBudgetPerTick={} "
                             + "precipitationActive={} precipitationSpeedMps={} "
                             + "precipitationHeadingDeg={} precipitationTiltDeg={} "
                             + "precipitationRenderer={} precipitationNativeOffset={} "
@@ -255,13 +297,20 @@ final class AtmosSwayDiagnostics {
                     sample.valid(), sample.forceX(), sample.forceZ(), sample.intensity(),
                     average.forceX(), average.forceZ(), average.intensity(),
                     committed.forceX(), committed.forceZ(), committed.intensity(),
+                    fast.forceX(), fast.forceZ(), fast.intensity(),
+                    adjustment.forceX(), adjustment.forceZ(), adjustment.intensity(),
+                    nearby.forceX(), nearby.forceZ(), nearby.intensity(),
                     WIND_COMMITS.sumThenReset(), SUPPRESSED_WINDOWS.sumThenReset(), lastCommitReason,
                     latestAnimationPoseTick, latestAnimationPoseStepTicks, activeAnimationSections,
                     ANIMATION_PASSES.sumThenReset(), ANIMATION_INVALIDATIONS.sumThenReset(),
-                    WindSpatialVariation.crosswindEnvelope(committed.intensity()),
-                    WindSpatialVariation.alongWindEnvelope(committed.intensity()),
+                    WindSpatialVariation.crosswindEnvelope(nearby.intensity()),
+                    WindSpatialVariation.alongWindEnvelope(nearby.intensity()),
                     NearestSectionSelector.MAX_SECTIONS,
                     WindAnimationScheduler.SECTIONS_PER_TICK,
+                    GUST_PROPAGATIONS.sumThenReset(), GUST_INVALIDATIONS.sumThenReset(),
+                    GUST_RESTORATIONS.sumThenReset(), gustPropagationActive,
+                    gustPropagationPending, gustPropagationRemaining,
+                    GustPropagationScheduler.SECTIONS_PER_TICK,
                     precipitationActive, precipitationSpeedMps,
                     precipitationHeadingDegrees, precipitationTiltDegrees,
                     precipitationRenderer, precipitationNativeOffset,
@@ -306,6 +355,9 @@ final class AtmosSwayDiagnostics {
         ANIMATION_PASSES.reset();
         ANIMATION_INVALIDATIONS.reset();
         ANIMATION_TARGET_UPDATES.reset();
+        GUST_PROPAGATIONS.reset();
+        GUST_INVALIDATIONS.reset();
+        GUST_RESTORATIONS.reset();
         SECTION_BUILD_SNAPSHOTS.reset();
         ANIMATED_BUILD_SNAPSHOTS.reset();
         SWAY_SCANS_EXECUTED.reset();
@@ -315,12 +367,18 @@ final class AtmosSwayDiagnostics {
         latestSample = SampleSnapshot.NONE;
         latestAverage = ForceSnapshot.NONE;
         committedWind = ForceSnapshot.NONE;
+        fastSmoothedWind = ForceSnapshot.NONE;
+        gustAdjustment = ForceSnapshot.NONE;
+        nearbyWind = ForceSnapshot.NONE;
         lastCommitReason = "none";
         lastRefreshReason = "none";
         latestAnimationPoseTick = 0L;
         previousAnimationPoseTick = Long.MIN_VALUE;
         latestAnimationPoseStepTicks = 0L;
         activeAnimationSections = 0;
+        gustPropagationActive = false;
+        gustPropagationPending = false;
+        gustPropagationRemaining = 0;
         precipitationActive = false;
         precipitationSpeedMps = 0.0F;
         precipitationHeadingDegrees = 0.0F;

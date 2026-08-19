@@ -7,15 +7,22 @@ body:
   - type: markdown
     attributes:
       value: |
+<<<<<<< Updated upstream
         Thanks for helping improve AtmosSway. Before reproducing the problem, open `config/atmossway-client.toml` and set `debugLogging = true` under `[wind]`. Restart Minecraft if needed, reproduce the bug, and attach `logs/latest.log` below.
+=======
+        Before reproducing the problem, open `config/atmossway-client.toml` and set `debugLogging = true` under `[wind]`. Restart Minecraft if needed, reproduce the bug, and attach `logs/latest.log` below. The log includes the game, loader, mod, and dependency versions needed for diagnosis.
+>>>>>>> Stashed changes
 
   - type: checkboxes
     id: prerequisites
     attributes:
       label: Before submitting
       options:
+<<<<<<< Updated upstream
         - label: I am using a supported Minecraft, NeoForge, SWAY, Project Atmosphere, and Simple Clouds version.
           required: true
+=======
+>>>>>>> Stashed changes
         - label: I set `[wind].debugLogging = true` in `config/atmossway-client.toml` before reproducing the problem.
           required: true
         - label: I searched the existing issues and did not find a matching report.
@@ -25,8 +32,13 @@ body:
     id: description
     attributes:
       label: What happened?
+<<<<<<< Updated upstream
       description: Describe the problem and what you expected to happen instead.
       placeholder: Tell us what you observed and what you expected.
+=======
+      description: Describe what you observed and what you expected to happen instead.
+      placeholder: Tell us what happened and what you expected.
+>>>>>>> Stashed changes
     validations:
       required: true
 
@@ -42,6 +54,7 @@ body:
     validations:
       required: true
 
+<<<<<<< Updated upstream
   - type: input
     id: minecraft-version
     attributes:
@@ -75,6 +88,8 @@ body:
     validations:
       required: true
 
+=======
+>>>>>>> Stashed changes
   - type: textarea
     id: logs
     attributes:
@@ -88,4 +103,8 @@ body:
     id: additional-context
     attributes:
       label: Additional context
+<<<<<<< Updated upstream
       description: Add screenshots, videos, configuration changes, or anything else that may help.
+=======
+      description: Add screenshots, videos, unusual configuration changes, or anything else that may help.
+>>>>>>> Stashed changes

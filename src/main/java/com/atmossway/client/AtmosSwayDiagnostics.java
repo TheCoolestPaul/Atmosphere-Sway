@@ -29,6 +29,8 @@ final class AtmosSwayDiagnostics {
     private static final LongAdder WIND_COMMITS = new LongAdder();
     private static final LongAdder SUPPRESSED_WINDOWS = new LongAdder();
     private static final LongAdder ANIMATION_PASSES = new LongAdder();
+    private static final LongAdder ANIMATION_CADENCE_SKIPS = new LongAdder();
+    private static final LongAdder ANIMATION_URGENT_PASSES = new LongAdder();
     private static final LongAdder ANIMATION_INVALIDATIONS = new LongAdder();
     private static final LongAdder ANIMATION_TARGET_UPDATES = new LongAdder();
     private static final LongAdder SECTION_BUILD_SNAPSHOTS = new LongAdder();
@@ -54,6 +56,7 @@ final class AtmosSwayDiagnostics {
     private static volatile long previousAnimationPoseTick = Long.MIN_VALUE;
     private static volatile long latestAnimationPoseStepTicks;
     private static volatile int activeAnimationSections;
+    private static volatile String lastAnimationPassReason = "none";
     private static volatile boolean precipitationActive;
     private static volatile float precipitationSpeedMps;
     private static volatile float precipitationHeadingDegrees;
@@ -177,7 +180,8 @@ final class AtmosSwayDiagnostics {
         WIND_COMMITS.increment();
     }
 
-    static void animationPassStarted(long poseTick, int activeSections) {
+    static void animationPassStarted(long poseTick, int activeSections,
+                                     WindAnimationScheduler.PassReason reason) {
         long previousPoseTick = previousAnimationPoseTick;
         latestAnimationPoseStepTicks = previousPoseTick == Long.MIN_VALUE || poseTick < previousPoseTick
                 ? 0L
@@ -185,6 +189,10 @@ final class AtmosSwayDiagnostics {
         previousAnimationPoseTick = poseTick;
         latestAnimationPoseTick = poseTick;
         activeAnimationSections = activeSections;
+        lastAnimationPassReason = reason.diagnosticName();
+        if (reason.urgent()) {
+            ANIMATION_URGENT_PASSES.increment();
+        }
     }
 
     static void animationPassCompleted() {
@@ -193,6 +201,10 @@ final class AtmosSwayDiagnostics {
 
     static void animationSectionsInvalidated(int count) {
         ANIMATION_INVALIDATIONS.add(count);
+    }
+
+    static void animationCadenceSkipped() {
+        ANIMATION_CADENCE_SKIPS.increment();
     }
 
     static void animationTargetUpdated() {
@@ -295,7 +307,8 @@ final class AtmosSwayDiagnostics {
                             + "transitionProgress={} transitionRemainingTicks={} "
                             + "windCommits={} suppressedWindows={} lastCommit={} "
                             + "animationPoseTick={} animationPoseStepTicks={} animationSections={} "
-                            + "animationPasses={} "
+                            + "animationPasses={} animationCadenceSkips={} "
+                            + "animationUrgentPasses={} animationPassReason={} "
                             + "animationInvalidations={} animationCrossEnvelope={} "
                             + "animationAlongEnvelope={} animationSectionCap={} "
                             + "animationBudgetPerTick={} "
@@ -323,7 +336,9 @@ final class AtmosSwayDiagnostics {
                     transitionProgress, transitionRemainingTicks,
                     WIND_COMMITS.sumThenReset(), SUPPRESSED_WINDOWS.sumThenReset(), lastCommitReason,
                     latestAnimationPoseTick, latestAnimationPoseStepTicks, activeAnimationSections,
-                    ANIMATION_PASSES.sumThenReset(), ANIMATION_INVALIDATIONS.sumThenReset(),
+                    ANIMATION_PASSES.sumThenReset(), ANIMATION_CADENCE_SKIPS.sumThenReset(),
+                    ANIMATION_URGENT_PASSES.sumThenReset(), lastAnimationPassReason,
+                    ANIMATION_INVALIDATIONS.sumThenReset(),
                     WindSpatialVariation.crosswindEnvelope(animated.intensity()),
                     WindSpatialVariation.alongWindEnvelope(animated.intensity()),
                     NearestSectionSelector.MAX_SECTIONS,
@@ -372,6 +387,8 @@ final class AtmosSwayDiagnostics {
         WIND_COMMITS.reset();
         SUPPRESSED_WINDOWS.reset();
         ANIMATION_PASSES.reset();
+        ANIMATION_CADENCE_SKIPS.reset();
+        ANIMATION_URGENT_PASSES.reset();
         ANIMATION_INVALIDATIONS.reset();
         ANIMATION_TARGET_UPDATES.reset();
         SECTION_BUILD_SNAPSHOTS.reset();
@@ -396,6 +413,7 @@ final class AtmosSwayDiagnostics {
         previousAnimationPoseTick = Long.MIN_VALUE;
         latestAnimationPoseStepTicks = 0L;
         activeAnimationSections = 0;
+        lastAnimationPassReason = "none";
         precipitationActive = false;
         precipitationSpeedMps = 0.0F;
         precipitationHeadingDegrees = 0.0F;

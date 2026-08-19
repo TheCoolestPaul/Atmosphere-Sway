@@ -186,11 +186,10 @@ public final class AmbientWindController {
                                         long gameTick, boolean enabled) {
         boolean animate = enabled && animationWind.isPresent();
         if (!animate) {
-            ANIMATION_SCHEDULER.prepare(gameTick, 0, false);
-            if (ANIMATION_SECTIONS.size() > 0) {
-                ANIMATION_SECTIONS.reset(playerSectionX, playerSectionY, playerSectionZ);
-                AmbientRenderState.retainSectionTargets(ANIMATION_SECTIONS::contains);
-            }
+            ANIMATION_SCHEDULER.prepare(
+                    gameTick, 0, false, WindForceMath.WindForce.NONE, false
+            );
+            clearAnimatedSections(minecraft, level, gameTick);
             AtmosSwayDiagnostics.animationState(animationPoseTick, 0);
             return;
         }
@@ -201,13 +200,15 @@ public final class AmbientWindController {
         boolean playerMovedSections = currentSectionX != playerSectionX
                 || currentSectionY != playerSectionY
                 || currentSectionZ != playerSectionZ;
+        boolean forceRefresh = false;
         if (playerMovedSections) {
             playerSectionX = currentSectionX;
             playerSectionY = currentSectionY;
             playerSectionZ = currentSectionZ;
-            rebuildAnimationSections(level);
+            rebuildAnimationSections(minecraft, level);
             ANIMATION_SCHEDULER.restart();
             lastAnimationListTick = gameTick;
+            forceRefresh = true;
         } else {
             if (drainNewAnimationSections()) {
                 animationSectionsDirty = true;
@@ -217,17 +218,25 @@ public final class AmbientWindController {
                     || gameTick - lastAnimationListTick
                     >= WindAnimationScheduler.SECTION_LIST_REFRESH_TICKS;
             if ((refreshDue || animationSectionsDirty) && !ANIMATION_SCHEDULER.passActive()) {
-                rebuildAnimationSections(level);
+                forceRefresh = rebuildAnimationSections(minecraft, level);
                 lastAnimationListTick = gameTick;
             }
         }
 
         int animationSectionCount = ANIMATION_SECTIONS.size();
-        int batchCount = ANIMATION_SCHEDULER.prepare(gameTick, animationSectionCount, true);
+        int batchCount = ANIMATION_SCHEDULER.prepare(
+                gameTick, animationSectionCount, true, animationWind, forceRefresh
+        );
+        if (ANIMATION_SCHEDULER.cadenceSkippedThisTick()) {
+            AtmosSwayDiagnostics.animationCadenceSkipped();
+        }
         if (ANIMATION_SCHEDULER.passStartedThisTick()) {
             animationPoseTick = ANIMATION_SCHEDULER.poseTick();
             animationPassWind = animationWind;
-            AtmosSwayDiagnostics.animationPassStarted(animationPoseTick, animationSectionCount);
+            AtmosSwayDiagnostics.animationPassStarted(
+                    animationPoseTick, animationSectionCount,
+                    ANIMATION_SCHEDULER.passReason()
+            );
         }
 
         int invalidated = 0;
@@ -250,7 +259,13 @@ public final class AmbientWindController {
         AtmosSwayDiagnostics.animationState(animationPoseTick, animationSectionCount);
     }
 
-    private static void rebuildAnimationSections(ClientLevel level) {
+    private static boolean rebuildAnimationSections(Minecraft minecraft, ClientLevel level) {
+        int previousCount = ANIMATION_SECTIONS.size();
+        long[] previousSections = new long[previousCount];
+        for (int index = 0; index < previousCount; index++) {
+            previousSections[index] = ANIMATION_SECTIONS.get(index);
+        }
+
         ANIMATION_SECTIONS.reset(playerSectionX, playerSectionY, playerSectionZ);
         for (long packed : SWAY_SECTIONS) {
             SectionPos section = SectionPos.of(packed);
@@ -264,7 +279,54 @@ public final class AmbientWindController {
         }
         drainNewAnimationSections();
         AmbientRenderState.retainSectionTargets(ANIMATION_SECTIONS::contains);
+        int clearedInvalidations = 0;
+        for (long packed : previousSections) {
+            if (ANIMATION_SECTIONS.contains(packed)) {
+                continue;
+            }
+            SectionPos section = SectionPos.of(packed);
+            if (level.hasChunk(section.x(), section.z())) {
+                minecraft.levelRenderer.setSectionDirty(section.x(), section.y(), section.z());
+                clearedInvalidations++;
+            }
+        }
+        AtmosSwayDiagnostics.animationSectionsInvalidated(clearedInvalidations);
         animationSectionsDirty = false;
+        if (previousCount != ANIMATION_SECTIONS.size()) {
+            return true;
+        }
+        for (int index = 0; index < previousCount; index++) {
+            if (previousSections[index] != ANIMATION_SECTIONS.get(index)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void clearAnimatedSections(Minecraft minecraft, ClientLevel level,
+                                              long gameTick) {
+        int sectionCount = ANIMATION_SECTIONS.size();
+        if (sectionCount == 0) {
+            return;
+        }
+
+        animationPoseTick = gameTick;
+        AtmosSwayDiagnostics.animationPassStarted(
+                gameTick, sectionCount, WindAnimationScheduler.PassReason.FINAL_CLEAR
+        );
+        int invalidated = 0;
+        for (int index = 0; index < sectionCount; index++) {
+            long packed = ANIMATION_SECTIONS.get(index);
+            AmbientRenderState.clearSectionTarget(packed);
+            SectionPos section = SectionPos.of(packed);
+            if (level.hasChunk(section.x(), section.z())) {
+                minecraft.levelRenderer.setSectionDirty(section.x(), section.y(), section.z());
+                invalidated++;
+            }
+        }
+        ANIMATION_SECTIONS.reset(playerSectionX, playerSectionY, playerSectionZ);
+        AtmosSwayDiagnostics.animationSectionsInvalidated(invalidated);
+        AtmosSwayDiagnostics.animationPassCompleted();
     }
 
     private static boolean drainNewAnimationSections() {

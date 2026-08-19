@@ -6,7 +6,7 @@ AtmosSway is a compatibility mod for Minecraft 1.21.1 on NeoForge. Its client re
 
 - Combines ambient wind with SWAY's existing entity-contact forces.
 - Supports vanilla and modded foliage registered through SWAY.
-- Rebuilds the three nearest foliage sections together every game tick for smooth, synchronized gust movement.
+- Rebuilds the three nearest foliage sections together on an adaptive two-tick cadence, with immediate updates for gusts and proximity changes.
 - Angles Project Atmosphere rain and snow, with Simple Clouds fallback support.
 - Synchronizes regional surface wind from dedicated servers every five server ticks.
 
@@ -45,11 +45,11 @@ NeoForge creates `config/atmossway-client.toml` after the first launch.
 
 Enable `debugLogging` when troubleshooting wind sampling, foliage application, or precipitation integration. Logging is rate-limited and never emitted per plant or rain streak.
 
-Diagnostic summaries identify the active `windSource` as `server_sync`, `integrated_direct`, or `unavailable`. They also report `syncAgeTicks`, the dimension/region match result, and received/rejected packet counts. On an updated dedicated server, `windSource=server_sync` confirms that multiplayer wind data is arriving.
+Diagnostic summaries identify the active `windSource` as `server_sync`, `integrated_direct`, or `unavailable`. They also report `syncAgeTicks`, the dimension/region match result, received/rejected packet counts, adaptive animation cadence skips, urgent passes, and the latest animation pass reason. On an updated dedicated server, `windSource=server_sync` confirms that multiplayer wind data is arriving.
 
 Project Atmosphere can report genuinely calm conditions. A synchronized wind speed of zero intentionally produces no ambient foliage motion or precipitation tilt; SWAY's player and mob contact deformation continues to work normally.
 
-Nearby animation is intentionally capped at three sections and three rebuilds per tick. Sections outside that set use the latest published base wind whenever Minecraft or an alternate chunk renderer naturally rebuilds them; gusts do not trigger staggered rebuilds across the distant loaded view.
+Nearby animation is intentionally capped at three sections. During steady wind, all three receive one synchronized pose every two client ticks; meaningful gust changes, player movement, and nearby selection changes refresh them immediately. Sections outside that set use the latest published base wind whenever Minecraft or an alternate chunk renderer naturally rebuilds them; gusts do not trigger staggered rebuilds across the distant loaded view.
 
 ## Building
 

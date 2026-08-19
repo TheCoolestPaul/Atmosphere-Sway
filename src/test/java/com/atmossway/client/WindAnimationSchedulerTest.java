@@ -16,23 +16,20 @@ class WindAnimationSchedulerTest {
     }
 
     @Test
-    void limitsEveryTickToThreeSectionsAndHoldsOnePoseForThePass() {
+    void allThreeSelectedSectionsReceiveOneSynchronizedPoseEveryTick() {
         WindAnimationScheduler scheduler = new WindAnimationScheduler();
 
-        assertEquals(3, scheduler.prepare(100L, 8, true));
+        assertEquals(3, scheduler.prepare(100L, 3, true));
         assertEquals(0, scheduler.batchStart());
         assertTrue(scheduler.passStartedThisTick());
-        assertEquals(100L, scheduler.poseTick());
-
-        assertEquals(3, scheduler.prepare(101L, 8, true));
-        assertEquals(3, scheduler.batchStart());
-        assertFalse(scheduler.passStartedThisTick());
-        assertEquals(100L, scheduler.poseTick());
-
-        assertEquals(2, scheduler.prepare(102L, 8, true));
-        assertEquals(6, scheduler.batchStart());
         assertTrue(scheduler.passCompletedThisTick());
         assertEquals(100L, scheduler.poseTick());
+
+        assertEquals(3, scheduler.prepare(101L, 3, true));
+        assertEquals(0, scheduler.batchStart());
+        assertTrue(scheduler.passStartedThisTick());
+        assertTrue(scheduler.passCompletedThisTick());
+        assertEquals(101L, scheduler.poseTick());
     }
 
     @Test
@@ -47,31 +44,15 @@ class WindAnimationSchedulerTest {
     }
 
     @Test
-    void incorporatesSectionsAddedDuringAnActivePass() {
+    void fewerThanThreeSectionsStillReceiveANewPoseEveryTick() {
         WindAnimationScheduler scheduler = new WindAnimationScheduler();
-        assertEquals(3, scheduler.prepare(0L, 5, true));
-
-        assertEquals(3, scheduler.prepare(1L, 8, true));
-        assertEquals(3, scheduler.batchStart());
-        assertEquals(2, scheduler.prepare(2L, 8, true));
-        assertEquals(6, scheduler.batchStart());
-        assertTrue(scheduler.passCompletedThisTick());
-    }
-
-    @Test
-    void completesSixSectionsInTwoTicks() {
-        WindAnimationScheduler scheduler = new WindAnimationScheduler();
-
-        for (long tick = 0L; tick < 2L; tick++) {
-            assertEquals(3, scheduler.prepare(tick, 6, true));
-            assertEquals(tick * 3, scheduler.batchStart());
-            assertEquals(0L, scheduler.poseTick());
-        }
+        assertEquals(2, scheduler.prepare(0L, 2, true));
         assertTrue(scheduler.passCompletedThisTick());
 
-        assertEquals(3, scheduler.prepare(2L, 6, true));
+        assertEquals(2, scheduler.prepare(1L, 2, true));
         assertTrue(scheduler.passStartedThisTick());
-        assertEquals(2L, scheduler.poseTick());
+        assertTrue(scheduler.passCompletedThisTick());
+        assertEquals(1L, scheduler.poseTick());
     }
 
     @Test
@@ -91,15 +72,15 @@ class WindAnimationSchedulerTest {
     @Test
     void pausingAndRestartingBeginWithTheCurrentPose() {
         WindAnimationScheduler scheduler = new WindAnimationScheduler();
-        scheduler.prepare(10L, 8, true);
-        assertEquals(0, scheduler.prepare(11L, 8, false));
+        scheduler.prepare(10L, 3, true);
+        assertEquals(0, scheduler.prepare(11L, 3, false));
 
-        assertEquals(3, scheduler.prepare(50L, 8, true));
+        assertEquals(3, scheduler.prepare(50L, 3, true));
         assertTrue(scheduler.passStartedThisTick());
         assertEquals(50L, scheduler.poseTick());
 
         scheduler.restart();
-        assertEquals(3, scheduler.prepare(75L, 8, true));
+        assertEquals(3, scheduler.prepare(75L, 3, true));
         assertEquals(0, scheduler.batchStart());
         assertEquals(75L, scheduler.poseTick());
     }

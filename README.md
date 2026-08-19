@@ -6,7 +6,7 @@ AtmosSway is a client-side compatibility mod for Minecraft 1.21.1 on NeoForge. I
 
 - Combines ambient wind with SWAY's existing entity-contact forces.
 - Supports vanilla and modded foliage registered through SWAY.
-- Adds smooth nearby gust movement with stable variation between plants.
+- Rebuilds the three nearest foliage sections together every game tick for smooth, synchronized gust movement.
 - Angles Project Atmosphere rain and snow, with Simple Clouds fallback support.
 
 ## Requirements
@@ -38,9 +38,11 @@ NeoForge creates `config/atmossway-client.toml` after the first launch.
 | `maxWindIntensity` | `2.0` | Caps wind-driven SWAY intensity. |
 | `sampleIntervalTicks` | `1` | Controls how often Project Atmosphere wind is sampled. |
 | `stabilizationWindowTicks` | `100` | Controls sustained-wind averaging time. |
-| `renderChangeThreshold` | `0.05` | Minimum sustained wind change before distant foliage updates. |
+| `renderChangeThreshold` | `0.05` | Minimum sustained wind change before the published base wind changes. |
 
 Enable `debugLogging` when troubleshooting wind sampling, foliage application, or precipitation integration. Logging is rate-limited and never emitted per plant or rain streak.
+
+Nearby animation is intentionally capped at three sections and three rebuilds per tick. Sections outside that set use the latest published base wind whenever Minecraft or an alternate chunk renderer naturally rebuilds them; gusts do not trigger staggered rebuilds across the distant loaded view.
 
 ## Building
 

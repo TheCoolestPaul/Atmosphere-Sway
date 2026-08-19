@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class NearestSectionSelectorTest {
     @Test
-    void retainsOnlyTheSixNearestSectionsWithinRadius() {
+    void retainsOnlyTheThreeNearestSectionsWithinRadius() {
         NearestSectionSelector selector = new NearestSectionSelector();
         selector.reset(0, 0, 0);
 
@@ -45,8 +45,8 @@ class NearestSectionSelectorTest {
         selector.consider(3L, 0, 0, -1);
         tied.sort(Long::compare);
 
-        assertEquals(tied.size(), selector.size());
-        for (int index = 0; index < tied.size(); index++) {
+        assertEquals(NearestSectionSelector.MAX_SECTIONS, selector.size());
+        for (int index = 0; index < selector.size(); index++) {
             assertEquals(tied.get(index).longValue(), selector.get(index));
         }
     }

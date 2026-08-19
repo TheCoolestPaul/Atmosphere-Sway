@@ -4,6 +4,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.LongPredicate;
 
 /**
  * Publishes immutable wind state to asynchronous terrain-compilation threads.
@@ -26,12 +27,12 @@ public final class AmbientRenderState {
         AtmosSwayDiagnostics.animationTargetUpdated();
     }
 
-    static void targetGust(long packedSection, WindForceMath.WindForce wind) {
-        SECTION_TARGETS.put(packedSection, new Snapshot(wind, 0L, false));
-    }
-
     static void clearSectionTarget(long packedSection) {
         SECTION_TARGETS.remove(packedSection);
+    }
+
+    static void retainSectionTargets(LongPredicate keepTarget) {
+        SECTION_TARGETS.keySet().removeIf(packedSection -> !keepTarget.test(packedSection));
     }
 
     static void clearSectionTargets() {

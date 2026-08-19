@@ -39,19 +39,6 @@ class AmbientRenderStateTest {
     }
 
     @Test
-    void propagatedGustUsesAStaticSectionSpecificWind() {
-        long section = 91L;
-        var gustWind = new WindForceMath.WindForce(-1.0F, 0.0F, 0.3F);
-        AmbientRenderState.publishWind(new WindForceMath.WindForce(0.0F, 1.0F, 0.2F));
-        AmbientRenderState.targetGust(section, gustWind);
-
-        var snapshot = AmbientRenderState.captureForSection(section);
-
-        assertEquals(gustWind, snapshot.wind());
-        assertFalse(snapshot.animated());
-    }
-
-    @Test
     void rendererFallbackUsesTheSectionAnimationTarget() {
         long section = 92L;
         var base = new WindForceMath.WindForce(0.0F, 1.0F, 0.2F);
@@ -64,19 +51,6 @@ class AmbientRenderStateTest {
         assertEquals(animated, snapshot.wind());
         assertEquals(81L, snapshot.animationPoseTick());
         assertTrue(snapshot.animated());
-    }
-
-    @Test
-    void rendererFallbackUsesTheSectionGustTarget() {
-        long section = 93L;
-        var gust = new WindForceMath.WindForce(-1.0F, 0.0F, 0.35F);
-        AmbientRenderState.publishWind(new WindForceMath.WindForce(0.0F, 1.0F, 0.2F));
-        AmbientRenderState.targetGust(section, gust);
-
-        var snapshot = AmbientRenderState.forPackedSection(section);
-
-        assertEquals(gust, snapshot.wind());
-        assertFalse(snapshot.animated());
     }
 
     @Test
@@ -102,10 +76,27 @@ class AmbientRenderStateTest {
         long section = 55L;
         var base = new WindForceMath.WindForce(0.0F, 1.0F, 0.2F);
         AmbientRenderState.publishWind(base);
-        AmbientRenderState.targetGust(section, new WindForceMath.WindForce(1.0F, 0.0F, 0.4F));
+        AmbientRenderState.targetAnimation(
+                section, new WindForceMath.WindForce(1.0F, 0.0F, 0.4F), 20L
+        );
 
         AmbientRenderState.clearSectionTarget(section);
 
         assertEquals(base, AmbientRenderState.captureForSection(section).wind());
+    }
+
+    @Test
+    void retainingSelectedTargetsClearsSectionsThatLeaveTheAnimationSet() {
+        var base = new WindForceMath.WindForce(0.0F, 1.0F, 0.2F);
+        var animated = new WindForceMath.WindForce(1.0F, 0.0F, 0.4F);
+        AmbientRenderState.publishWind(base);
+        AmbientRenderState.targetAnimation(10L, animated, 20L);
+        AmbientRenderState.targetAnimation(11L, animated, 20L);
+
+        AmbientRenderState.retainSectionTargets(section -> section == 11L);
+
+        assertEquals(base, AmbientRenderState.captureForSection(10L).wind());
+        assertEquals(animated, AmbientRenderState.captureForSection(11L).wind());
+        assertTrue(AmbientRenderState.captureForSection(11L).animated());
     }
 }

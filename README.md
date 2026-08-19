@@ -67,8 +67,8 @@ NeoForge creates `config/atmossway-client.toml` after the first launch:
 [wind]
 enabled = true
 debugLogging = false
-windStrengthScale = 0.08
-maxWindIntensity = 1.5
+windStrengthScale = 0.10
+maxWindIntensity = 2.0
 sampleIntervalTicks = 1
 stabilizationWindowTicks = 100
 renderChangeThreshold = 0.05

@@ -11,6 +11,8 @@ public final class AtmosSwayConfig {
     public static final ModConfigSpec.IntValue SAMPLE_INTERVAL_TICKS;
     public static final ModConfigSpec.IntValue STABILIZATION_WINDOW_TICKS;
     public static final ModConfigSpec.DoubleValue RENDER_CHANGE_THRESHOLD;
+    public static final ModConfigSpec.BooleanValue PARTICLE_RAIN_ADAPTER;
+    public static final ModConfigSpec.DoubleValue PARTICLE_RAIN_WIND_SCALE;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -38,6 +40,12 @@ public final class AtmosSwayConfig {
         RENDER_CHANGE_THRESHOLD = builder
                 .comment("Minimum SWAY force-vector change required to rebuild foliage sections.")
                 .defineInRange("renderChangeThreshold", 0.05D, 0.0D, 1.0D);
+        PARTICLE_RAIN_ADAPTER = builder
+                .comment("Use Project Atmosphere wind for Particle Rain effects when installed.")
+                .define("particleRainAdapter", true);
+        PARTICLE_RAIN_WIND_SCALE = builder
+                .comment("Particle Rain horizontal velocity per metre per second of surface wind.")
+                .defineInRange("particleRainWindScale", 0.06D, 0.0D, 0.25D);
 
         builder.pop();
         SPEC = builder.build();

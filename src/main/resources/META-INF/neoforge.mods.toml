@@ -47,3 +47,11 @@ type = "required"
 versionRange = "[0.7.3,0.8)"
 ordering = "AFTER"
 side = "CLIENT"
+
+[[dependencies."${mod_id}"]]
+modId = "particlerain"
+type = "optional"
+versionRange = "[0,)"
+ordering = "AFTER"
+side = "CLIENT"
+reason = "Wind adapter supports Particle Rain 4.0.0-beta.6 and newer; older versions remain unaffected."

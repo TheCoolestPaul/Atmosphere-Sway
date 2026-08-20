@@ -37,6 +37,7 @@ final class AtmosSwayDiagnostics {
     private static final LongAdder ANIMATED_BUILD_SNAPSHOTS = new LongAdder();
     private static final LongAdder SWAY_SCANS_EXECUTED = new LongAdder();
     private static final LongAdder SWAY_SCANS_SUPPRESSED = new LongAdder();
+    private static final LongAdder PARTICLE_RAIN_WIND_OVERRIDES = new LongAdder();
     private static final AtomicLong TOTAL_UNRESOLVED = new AtomicLong();
     private static final Set<String> WARNED_KEYS = ConcurrentHashMap.newKeySet();
 
@@ -63,6 +64,7 @@ final class AtmosSwayDiagnostics {
     private static volatile float precipitationTiltDegrees;
     private static volatile String precipitationRenderer = "inactive";
     private static volatile float precipitationNativeOffset;
+    private static volatile boolean particleRainAdapterActive;
     private static long lastSummaryTick = Long.MIN_VALUE;
 
     private AtmosSwayDiagnostics() {
@@ -263,6 +265,14 @@ final class AtmosSwayDiagnostics {
         precipitationNativeOffset = nativeOffset;
     }
 
+    static void particleRainAdapterState(boolean active) {
+        particleRainAdapterActive = active;
+    }
+
+    static void particleRainWindOverride() {
+        PARTICLE_RAIN_WIND_OVERRIDES.increment();
+    }
+
     static void levelLoaded(ClientLevel level) {
         if (debugEnabled()) {
             AtmosSway.LOGGER.info("Diagnostics started for client level {}", level.dimension().location());
@@ -315,6 +325,8 @@ final class AtmosSwayDiagnostics {
                             + "precipitationActive={} precipitationSpeedMps={} "
                             + "precipitationHeadingDeg={} precipitationTiltDeg={} "
                             + "precipitationRenderer={} precipitationNativeOffset={} "
+                            + "particleRainAdapterEnabled={} particleRainAdapterActive={} "
+                            + "particleRainWindScale={} particleRainOverrides={} "
                             + "swayScansExecuted={} swayScansSuppressed={} "
                             + "sectionBuildSnapshots={} animatedBuildSnapshots={} "
                             + "animationTargetUpdates={} "
@@ -346,6 +358,9 @@ final class AtmosSwayDiagnostics {
                     precipitationActive, precipitationSpeedMps,
                     precipitationHeadingDegrees, precipitationTiltDegrees,
                     precipitationRenderer, precipitationNativeOffset,
+                    AtmosSwayConfig.PARTICLE_RAIN_ADAPTER.get(), particleRainAdapterActive,
+                    AtmosSwayConfig.PARTICLE_RAIN_WIND_SCALE.get(),
+                    PARTICLE_RAIN_WIND_OVERRIDES.sumThenReset(),
                     SWAY_SCANS_EXECUTED.sumThenReset(), SWAY_SCANS_SUPPRESSED.sumThenReset(),
                     SECTION_BUILD_SNAPSHOTS.sumThenReset(), ANIMATED_BUILD_SNAPSHOTS.sumThenReset(),
                     ANIMATION_TARGET_UPDATES.sumThenReset(),
@@ -395,6 +410,7 @@ final class AtmosSwayDiagnostics {
         ANIMATED_BUILD_SNAPSHOTS.reset();
         SWAY_SCANS_EXECUTED.reset();
         SWAY_SCANS_SUPPRESSED.reset();
+        PARTICLE_RAIN_WIND_OVERRIDES.reset();
         TOTAL_UNRESOLVED.set(0L);
         WARNED_KEYS.clear();
         latestSample = SampleSnapshot.NONE;
@@ -420,6 +436,7 @@ final class AtmosSwayDiagnostics {
         precipitationTiltDegrees = 0.0F;
         precipitationRenderer = "inactive";
         precipitationNativeOffset = 0.0F;
+        particleRainAdapterActive = false;
         lastSummaryTick = Long.MIN_VALUE;
     }
 

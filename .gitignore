@@ -11,3 +11,4 @@ bin/
 *.iws
 logs/
 crash-reports/
+__pycache__/

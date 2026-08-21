@@ -1,0 +1,40 @@
+{
+  "atmos_version": "1.5.0",
+  "dependencies": [
+    {
+      "name": "SWAY",
+      "project_id": "Gj6Yce3v",
+      "dependency_type": "required"
+    },
+    {
+      "name": "Project Atmosphere",
+      "project_id": "qIWoLcKJ",
+      "dependency_type": "required"
+    },
+    {
+      "name": "Simple Clouds",
+      "project_id": "LtZfKhel",
+      "dependency_type": "required"
+    },
+    {
+      "name": "Particle Rain",
+      "project_id": "nrikgvxm",
+      "dependency_type": "optional"
+    },
+    {
+      "name": "Supplementaries",
+      "project_id": "fFEIiSDQ",
+      "dependency_type": "optional"
+    },
+    {
+      "name": "Immersive Weathering: Renewed",
+      "project_id": "AtjxBimt",
+      "dependency_type": "optional"
+    },
+    {
+      "name": "Farmer's Delight",
+      "project_id": "R2OftAxM",
+      "dependency_type": "optional"
+    }
+  ]
+}

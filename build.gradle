@@ -10,6 +10,10 @@ base {
     archivesName = mod_id
 }
 
+tasks.named('jar', Jar) {
+    archiveVersion = "${mod_version}-NEO-${minecraft_version}"
+}
+
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
 repositories {

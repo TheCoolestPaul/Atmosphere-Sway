@@ -41,3 +41,23 @@ jobs:
 
       - name: Build and test
         run: ./gradlew build --build-cache --no-daemon --stacktrace -PskipDevelopmentRuntime=true
+
+      - name: Validate release metadata and artifact name
+        shell: bash
+        run: |
+          set -euo pipefail
+          mod_version="$(sed -n 's/^mod_version=//p' gradle.properties | tail -n 1 | tr -d '\r')"
+          minecraft_version="$(sed -n 's/^minecraft_version=//p' gradle.properties | tail -n 1 | tr -d '\r')"
+          expected_jar="build/libs/atmossway-${mod_version}-NEO-${minecraft_version}.jar"
+
+          python3 scripts/validate_modrinth_release.py \
+            --manifest .github/modrinth-dependencies.json \
+            --expected-version "${mod_version}" \
+            --game-version "${minecraft_version}"
+          python3 -m unittest discover -s scripts/tests -v
+
+          mapfile -t jars < <(find build/libs -maxdepth 1 -type f -name '*.jar' -print)
+          if [[ "${#jars[@]}" -ne 1 || "${jars[0]}" != "${expected_jar}" ]]; then
+            echo "Expected only ${expected_jar}; found: ${jars[*]:-none}" >&2
+            exit 1
+          fi

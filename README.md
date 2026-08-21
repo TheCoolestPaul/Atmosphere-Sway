@@ -71,3 +71,5 @@ Build with Java 21:
 ```powershell
 .\gradlew.bat build
 ```
+
+The release jar is named `atmossway-<version>-NEO-<minecraft-version>.jar`. Maintainers should follow the version-tag and dependency review process in [RELEASING.md](RELEASING.md).

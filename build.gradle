@@ -55,11 +55,18 @@ dependencies {
 
     // Modrinth Maven does not publish transitive metadata. These make the
     // development client match Project Atmosphere's documented runtime stack.
-    runtimeOnly 'curse.maven:gabous-libs-1367332:8376871'
-    runtimeOnly 'curse.maven:simple-clouds-1121215:6928979'
-    runtimeOnly 'curse.maven:serene-seasons-291874:6182596'
-    runtimeOnly 'curse.maven:glitchcore-955399:5660740'
-    runtimeOnly 'curse.maven:architectury-api-419699:5786327'
+    // CI omits them because CurseMaven rate-limits hosted runners and these
+    // client-only jars are not required to compile or execute the unit tests.
+    def skipDevelopmentRuntime = providers.gradleProperty('skipDevelopmentRuntime')
+        .map { it.toBoolean() }
+        .getOrElse(false)
+    if (!skipDevelopmentRuntime) {
+        runtimeOnly 'curse.maven:gabous-libs-1367332:8376871'
+        runtimeOnly 'curse.maven:simple-clouds-1121215:6928979'
+        runtimeOnly 'curse.maven:serene-seasons-291874:6182596'
+        runtimeOnly 'curse.maven:glitchcore-955399:5660740'
+        runtimeOnly 'curse.maven:architectury-api-419699:5786327'
+    }
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'

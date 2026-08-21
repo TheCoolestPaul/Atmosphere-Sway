@@ -40,4 +40,4 @@ jobs:
           validate-wrappers: true
 
       - name: Build and test
-        run: ./gradlew build --build-cache --no-daemon --stacktrace
+        run: ./gradlew build --build-cache --no-daemon --stacktrace -PskipDevelopmentRuntime=true

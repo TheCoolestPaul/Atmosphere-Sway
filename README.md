@@ -32,6 +32,10 @@ The wind-sync channel is optional so mixed versions can still connect. If the se
 
 SWAY's registry and behavior pipelines determine compatibility. This includes SWAY's vanilla plants and modded plants explicitly supported through its API. Vines, sugar cane, double plants, and compatible multiblock foliage retain their shared SWAY behavior.
 
+When [Supplementaries](https://modrinth.com/mod/supplementaries) is installed, its flax crop and wild flax are registered with SWAY automatically. Supplementaries remains fully optional; AtmosSway does not load its classes or require Supplementaries or Moonlight to be present.
+
+When [Immersive Weathering: Renewed](https://modrinth.com/mod/immersive-weather-renewed) is installed, AtmosSway also registers its dune grass, frosty grass, frosty fern, weeds, ivy, moss, and wall hanging roots. Wall hanging roots use SWAY's shared hanging-vine behavior so connected vertical segments move from their top anchor. Immersive Weathering and its Moonlight dependency remain fully optional; AtmosSway does not load either mod's classes or require either mod to be present.
+
 ## Configuration
 
 NeoForge creates `config/atmossway-client.toml` after the first launch.

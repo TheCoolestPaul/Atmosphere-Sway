@@ -36,6 +36,8 @@ When [Supplementaries](https://modrinth.com/mod/supplementaries) is installed, i
 
 When [Immersive Weathering: Renewed](https://modrinth.com/mod/immersive-weather-renewed) is installed, AtmosSway also registers its dune grass, frosty grass, frosty fern, weeds, ivy, moss, and wall hanging roots. Wall hanging roots use SWAY's shared hanging-vine behavior so connected vertical segments move from their top anchor. Immersive Weathering and its Moonlight dependency remain fully optional; AtmosSway does not load either mod's classes or require either mod to be present.
 
+When [Farmer's Delight](https://modrinth.com/mod/farmers-delight) is installed, AtmosSway registers its cabbage, onion, tomato, and rice crops; their wild variants; sandy shrub; and brown and red mushroom colonies. Connected tomato plants use SWAY's upward-growing-vine behavior, while mature rice and its panicles move together as one plant. Farmer's Delight remains fully optional; AtmosSway does not load its classes or require it to be present.
+
 ## Configuration
 
 NeoForge creates `config/atmossway-client.toml` after the first launch.
